@@ -1,0 +1,67 @@
+# Glossary
+
+## Acronym Glossary
+
+- **ABI** - Application Binary Interface.
+- **ALU** - Arithmetic Logic Unit for 48-bit scalar and packed operations.
+- **ASID** - Address Space Identifier used to tag TLB entries.
+- **BADVADDR** - Bad Virtual Address register that records the faulting VA.
+- **BAU** - Base Address Unit, the architecture's 48-bit fundamental addressing granularity.
+- **BAR** - Base Address Register describing a device's MMIO window.
+- **CAUSE** - Trap cause register that reports the reason for an exception.
+- **CHERI** - Capability Hardware Enhanced RISC Instructions capability model.
+- **CPUID** - Processor identification register.
+- **CSR** - Control and Status Register.
+- **D$** - Data cache.
+- **DCFG** - Data-cache configuration register.
+- **DMA** - Direct Memory Access for enid endpoints and the CPU.
+- **DMACTL** - DMA control CSR that exposes the `sync_dma` fence and fabric status.
+- **DSP** - Digital Signal Processor (e.g., audio module).
+- **EPC** - Exception Program Counter saved on traps.
+- **EX** - Execute pipeline stage.
+- **GP** - Global Pointer register (`r13`).
+- **GPIO** - General-Purpose Input/Output.
+- **GPR** - General-Purpose Register.
+- **GPU** - Graphics Processing Unit module class.
+- **HFCP** - Hardware Flow-Control Protection token mechanism.
+- **HID** - Human Interface Device.
+- **IA** - Instruction Address front-end stage.
+- **ICFG** - Instruction-cache configuration register.
+- **ID** - Instruction Decode pipeline stage.
+- **IE** - Interrupt Enable bit in the STATUS register.
+- **IF** - Instruction Fetch pipeline stage.
+- **I$** - Instruction cache.
+- **IPI** - Inter-Processor Interrupt.
+- **IRQ** - Interrupt Request signal.
+- **ISA** - Instruction Set Architecture.
+- **IVEC** - Interrupt vector table capability register.
+- **LR** - Link Register (`r15`).
+- **MA** - Memory Access pipeline stage.
+- **MF** - Memory Fill pipeline stage.
+- **MMIO** - Memory-Mapped Input/Output.
+- **MSI** - Message Signaled Interrupt delivered over enid.
+- **MMU** - Memory Management Unit.
+- **MVP** - Minimum Viable Product baseline configuration.
+- **NZCV** - Negative, Zero, Carry, Overflow condition flags.
+- **NPU** - Neural Processing Unit accelerator.
+- **PA** - Physical Address.
+- **PC** - Program Counter.
+- **PCIe** - Peripheral Component Interconnect Express.
+- **PTBR** - Page Table Base Register.
+- **PTE** - Page Table Entry.
+- **PHY** - Physical layer transceiver for high-speed links.
+- **RFC** - Request for Comments internet standard.
+- **RC** - Root Complex managing the enid fabric.
+- **SerDes** - Serializer/Deserializer link technology.
+- **SoC** - System on Chip.
+- **SP** - Stack Pointer (`r14`).
+- **SSP** - Shadow Stack Pointer used by HFCP.
+- **TLB** - Translation Lookaside Buffer.
+- **TLBCFG** - TLB configuration register.
+- **UI** - Upper Immediate latch for wide immediates.
+- **VA** - Virtual Address.
+- **VPN0** - Level-0 Virtual Page Number field.
+- **VPN1** - Level-1 Virtual Page Number field.
+- **VPN2** - Level-2 Virtual Page Number field.
+- **WB** - Write Back pipeline stage.
+- **XT** - eXTract pipeline stage that unpacks instruction syllables.
