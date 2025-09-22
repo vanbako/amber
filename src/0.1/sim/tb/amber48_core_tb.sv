@@ -77,8 +77,9 @@ module amber48_core_tb;
   );
 
   amber48_uart_tx #(
+      // Fast UART for simulation throughput
       .CLOCK_FREQ_HZ(100_000_000),
-      .BAUD_RATE    (115_200)
+      .BAUD_RATE    (1_000_000)
   ) u_uart_tx (
       .clk_i  (clk),
       .rst_ni (rst_ni),
@@ -114,11 +115,12 @@ module amber48_core_tb;
     forever begin
       @(posedge clk);
       cycle_count++;
+      // Allow enough cycles for the PASS string to drain the UART
       if (trap) begin
         $display("[%0t] Trap asserted (cause=%0d), ending simulation", $time, trap_cause);
         #20 $finish;
       end
-      if (cycle_count > 2000) begin
+      if (cycle_count > 5000000) begin
         $fatal(1, "Simulation timed out");
       end
     end
