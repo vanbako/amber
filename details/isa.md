@@ -40,7 +40,7 @@ These names appear in opcode tables and documentation wherever an `isa` column i
 * **Short regs in 12-bit forms:** fixed **3-bit subset `r0..r7`**.
 * **Pointers are CHERI-style capabilities** (96-bit).
 * **Security:** LR/SSP + **12-bit `land`** (hardware flow-control protection).
-* **ISA features:** 48-bit/24-bit arithmetic (no mul/div yet), logic & shifts/rotates, branches, compare/test, CSR, `jump_sub/return/push/pop` via micro-ops.
+* **ISA features:** 48-bit/24-bit arithmetic (no mul/div yet), logic & shifts/rotates, branches, compare/test, CSR, stack and call control (`jump_sub/return/push/pop`).
 * **MMU:** 48-bit VA -> (<=42-bit PA), with capability checks in parallel.
 
 #### enid I/O Fabric
@@ -159,7 +159,7 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
   * `branch_cond cond, rs, rt, target` compares two registers; `lt.s/lt.u/gt.s/gt.u/eq/ne` select signed or unsigned interpretation.
   * `branch_sub target` pushes a return address before branching.
 * **Syllable encoding:** PC-relative displacements live in 12-bit syllables (not BAUs). Short (12-bit), medium (24-bit), and long (48-bit absolute) forms exist for control flow.
-* **`jump_sub`/`return`** execute via micro-ops with **LR/SSP** and **HFCP** (`land tok9`) checks at indirect targets.
+* **`jump_sub`/`return`** integrate **LR/SSP** updates and **HFCP** (`land tok9`) checks at indirect targets; operational sequencing lives in `details/micro-ops.md` (uppercase micro-op names).
 
 ---
 
@@ -170,4 +170,3 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
   Patterns: `upper_imm` + `add_imm.ext`, `upper_imm` + `load.ext`, etc.
 
 ---
-

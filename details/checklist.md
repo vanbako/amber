@@ -8,9 +8,8 @@
 * [ ] MMU: 3-level walk (12+12+12) with `2^12` BAU pages; `2^24` BAU large pages at level-1.
 * [ ] Scalar 48-bit ALU + packed 24-bit ALU (`.u` & `.s`).
 * [ ] CSR access; `upper_imm` + UI latch for wide immediates.
-* [ ] Traps/IRQs; `jump_sub/return/push/pop` via micro-ops; HFCP token check.
+* [ ] Traps/IRQs; call/stack micro-ops (`jump_sub/return/push/pop`) per `details/micro-ops.md` (uppercase catalogue); HFCP token check.
 * [ ] enid PHY + SerDes bring-up (lane training, framing, link reset).
 * [ ] enid 3-port root complex with MSI bridge and capability validation.
 * [ ] enid switch enumeration firmware: discover ports, allocate MMIO/DMA capabilities, program MSI vectors.
 * [ ] Driver-model hooks for enid modules (GPU, audio, storage, HID, network, NPU) covering MMIO, DMA, and interrupt setup.
-

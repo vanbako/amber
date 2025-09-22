@@ -49,7 +49,7 @@
 
 * `soft_interrupt imm4` (12-bit form) raises an interrupt using cause code `0x10 | imm4`, sharing the hardware entry machinery (`CAUSE[47]=1`). The instruction is privileged; user mode traps with `PrivFault`.
 * Software interrupts are intended for kernel-originated IPIs (e.g., scheduler ticks, cross-core shootdowns) and for debugging hooks. They do not bypass capability checks.
-* **Syscall is *not* implemented via software interrupts.** A dedicated `sys_call` micro-op raises synchronous trap cause `Syscall` (without setting `CAUSE[47]`), keeping the ABI stable even if software interrupts are disabled.
+* **Syscall is *not* implemented via software interrupts.** A dedicated `sys_call` path (see `details/micro-ops.md` for uppercase micro-ops) raises synchronous trap cause `Syscall` (without setting `CAUSE[47]`), keeping the ABI stable even if software interrupts are disabled.
 * Handlers return with `sys_return`, re-enabling interrupts according to the saved `STATUS` image.
 
 ---
@@ -76,10 +76,10 @@
 IA -> IF -> XT -> ID -> EX -> MA -> MF -> WB
 ```
 
-* **Single-cycle** micro-ops from ID->WB on cache hits.
+* **Single-cycle** micro-ops from ID->WB on cache hits (documented with uppercase mnemonics in `details/micro-ops.md`).
 * Misses stall MA/MF.
 * XT enforces packing rules: **branch/indirect targets land on syllable 0** of a bundle.
-* micro-ops/ISA split enables `jump_sub/return/push/pop` without multi-cycle instructions.
+* The micro-ops/ISA split enables `jump_sub/return/push/pop` without multi-cycle instructions; sequencing lives in `details/micro-ops.md`.
 
 ### Hazard considerations
 
