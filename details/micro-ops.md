@@ -11,10 +11,37 @@ Micro-ops always appear in **UPPERCASE** to make the split obvious. The table
 summarises the baseline catalogue and the ISA instructions that typically emit
 them.
 
+### Register Sets
+
+Amber48 exposes four programmer-visible register families. Micro-ops stay within
+one family unless noted, letting the register file and capability pipelines
+optimise for operand width and metadata.
+
+- **Data registers (`r0..r15`)** hold 48-bit integer or packed-lane values.
+  `r0` is the architectural zero; `r1..r13` are general-purpose. `r14`/`r15`
+  alias `SP`/`LR` when code needs a scalar view, but their architected updates
+  still retire through the special-register path so the stack and return
+  pointers keep their capability metadata.
+- **Capability registers (`c0..c7`)** carry 96-bit CHERI-style pointers plus a
+  tag. `c0` (`cPCC`) and `c1` (`cDDC`) are reserved; `c2..c7` are allocatable.
+  Capability micro-ops preserve bounds, permissions, and tags; integer micro-ops
+  never alias into this bank.
+- **Control and Status Registers (CSRs)** capture privileged machine state such
+  as `STATUS`, `EPC`, `TLBCFG`, and `IVEC`. Only the `csr_*` micro-ops read or
+  write them, and the results bypass the integer and capability rename queues.
+- **Special registers (SRs)** are always-live values that steer control flow:
+  the fetch cursor (`PC` via `cPCC`), `SP`, `LR`, the hardware flow-control
+  `SSP`, and the `STATE`/`NZCV` flags. The pointer-flavoured SRs (`PC`, `SP`,
+  `LR`, `SSP`) are materialised as capabilities so traps, calls, and stack
+  updates inherit bounds and permissions automatically; the flag SR remains a
+  narrow, non-capability value.
+
+### Baseline Catalogue
+
 | Micro-op | Description | ISA sources |
 |----------|-------------|-------------|
 | `NOP` | Bubble inserted for hazard recovery or trap entry padding. | `no_oper`, pipeline controls |
-| `MOV` | Register-to-register copy or capability pointer move. | `copy`, `cap_copy` |
+| `MOV` | Copies within the data (`r`) bank or between capability (`c`) registers while preserving the tag. | `copy`, `cap_copy` |
 | `NEG` | Two's-complement negate. | `negate`, `pack_negate.s/.u` |
 | `SUB` | Arithmetic subtract (scalar or packed lane). | `subtract`, `subtract_imm`, packed variants |
 | `ADD` | Arithmetic add (scalar or packed lane). | `add`, `add_imm`, packed variants |
@@ -27,17 +54,17 @@ them.
 | `ASR` | Arithmetic right shift. | `as_right`, `pack_as_right` |
 | `ROL` | Rotate left. | `rot_left`, `pack_rot_left` |
 | `ROR` | Rotate right. | `rot_right`, `pack_rot_right` |
-| `CMP` | Compares two operands and sets NZCV. | `compare`, `compare_imm` |
-| `TST` | Tests operand vs zero, updates flags without writeback. | `is_zero`, conditional branches |
-| `LAND` | Hardware flow-control prove/check using `land tok9`. | `land`, indirect control flow |
-| `BRA` | Unconditional branch with syllable target. | `branch` |
-| `BCC` | Conditional branch using NZCV state. | `branch_cond`, packed compare results |
-| `JMP` | Capability-checked jump to absolute address. | `jump`, `branch_sub` tail |
-| `JCC` | Conditional jump/call with capability check. | `jump_cond`, `cap_branch_cond` |
-| `PUSH` | Capability-safe stack/store of BAU payloads. | `push`, `jump_sub` prologue |
-| `POP` | Capability-safe stack/load of BAU payloads. | `pop`, `return` epilogue |
-| `RET` | Capability jump that restores LR/SSP. | `return` |
-| `TRAP` | Raises synchronous trap with captured state. | `sys_call`, faults |
+| `CMP` | Compares two data operands and updates the `STATE/NZCV` special register. | `compare`, `compare_imm` |
+| `TST` | Tests operand vs zero and updates the `STATE/NZCV` special register without writeback. | `is_zero`, conditional branches |
+| `LAND` | Hardware flow-control prove/check using `land tok9`, consuming the `SSP` capability SR. | `land`, indirect control flow |
+| `BRA` | Unconditional branch with syllable target, updating the `PC` capability via `cPCC`. | `branch` |
+| `BCC` | Conditional branch reading `STATE/NZCV` to steer the `PC` capability. | `branch_cond`, packed compare results |
+| `JMP` | Capability-checked jump that installs a new `cPCC`/`PC` from the capability bank or an SR alias. | `jump`, `branch_sub` tail |
+| `JCC` | Conditional jump/call with capability check, sourcing bounds from the capability bank and retiring through the SR path. | `jump_cond`, `cap_branch_cond` |
+| `PUSH` | Capability-safe stack/store of BAU payloads while updating the `SP`/`SSP` capability SRs. | `push`, `jump_sub` prologue |
+| `POP` | Capability-safe stack/load of BAU payloads while updating the `SP`/`SSP` capability SRs. | `pop`, `return` epilogue |
+| `RET` | Capability jump that restores `LR` and `SSP`, re-establishing `cPCC`. | `return` |
+| `TRAP` | Raises synchronous trap, capturing `PC`/`cPCC` and staging results into CSRs (`EPC`, `CAUSE`, `STATUS`). | `sys_call`, faults |
 
 Micro-ops can be combined; a single ISA instruction can map to multiple entries
 (e.g., `jump_sub` emits `PUSH`, `LAND`, `JMP`).
@@ -51,7 +78,10 @@ Micro-ops can be combined; a single ISA instruction can map to multiple entries
 
 ## Call & Stack Sequences
 
-Amber48 decomposes complex ISA helpers into short, ordered micro-op runs:
+Call-oriented ISA helpers straddle multiple register families: they read
+capabilities from the `c` bank, update the `SP`/`LR`/`SSP` special registers,
+and may stage trap metadata into CSRs. Amber48 decomposes them into short,
+ordered micro-op runs:
 
 * **`jump_sub`** → `PUSH` (save return capability), `LAND` (HFCP token check),
   `JMP` (capability branch to callee).
