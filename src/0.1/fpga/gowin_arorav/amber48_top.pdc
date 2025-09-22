@@ -1,0 +1,7 @@
+# Amber48 Gowin Arora-V constraint skeleton
+# TODO: map 27 MHz clock, reset button, LED0, UART pins.
+# Example placeholders:
+# IO_LOC \"clk_27mhz_i\" 35;
+# IO_LOC \"rst_button_ni\" 80;
+# IO_LOC \"led0_o\" 50;
+# IO_LOC \"uart_tx_o\" 12;
