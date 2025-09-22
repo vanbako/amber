@@ -1,16 +1,40 @@
-# Amber48 0.1 Gowin Arora-V build script (skeleton)
-set proj_dir [pwd]
+# Amber48 0.1 Gowin Arora-V build script
+set proj_dir [file normalize [pwd]]
 set proj_name amber48_top
+set impl_name impl_1
+set device_part GW2AR-LV18QN88C6/I5
+set top_module amber48_top
 
-# TODO: integrate with Gowin IDE command-line flow.
-# Placeholder illustrating intended flow.
-# create_project -name  -device GW2AR-LV18QN88C6/I5
-# add_file rtl/common/amber48_pkg.sv
-# add_file rtl/core/amber48_core.sv
-# add_file rtl/mem/amber48_imem.sv
-# add_file rtl/mem/amber48_dmem.sv
-# add_file rtl/platform/reset_sync.sv
-# add_file fpga/gowin_arorav/amber48_top.sv
-# set_option -top_module amber48_top
-# add_constraints fpga/gowin_arorav/amber48_top.pdc
-# run all
+if {[file exists ${proj_dir}/${proj_name}.gpr]} {
+  file delete -force ${proj_dir}/${proj_name}.gpr
+}
+
+create_project -name ${proj_name} -dir ${proj_dir} -device ${device_part}
+set_option -use_relative_file_path 1
+set_option -top_module ${top_module}
+set_option -verilog_std sysv2012
+
+set rtl_files {
+  src/0.1/rtl/common/amber48_pkg.sv
+  src/0.1/rtl/core/amber48_core.sv
+  src/0.1/rtl/core/amber48_alu.sv
+  src/0.1/rtl/core/amber48_decoder.sv
+  src/0.1/rtl/core/amber48_regfile.sv
+  src/0.1/rtl/mem/amber48_imem.sv
+  src/0.1/rtl/mem/amber48_dmem.sv
+  src/0.1/rtl/periph/amber48_uart_tx.sv
+  src/0.1/rtl/platform/reset_sync.sv
+  src/0.1/fpga/gowin_arorav/amber48_top.sv
+}
+foreach f ${rtl_files} {
+  add_file -type systemverilog $f
+}
+
+add_file -type constraint "src/0.1/fpga/gowin_arorav/amber48_top.pdc"
+
+save_project
+
+run synthesize
+run place
+run route
+run bitstream

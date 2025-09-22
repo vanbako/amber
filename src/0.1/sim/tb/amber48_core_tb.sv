@@ -26,6 +26,8 @@ module amber48_core_tb;
   logic [7:0]      led_bus;
   logic            uart_tx_valid;
   logic [7:0]      uart_tx_data;
+  logic            uart_tx_ready;
+  logic            uart_tx;
 
   amber48_core u_core (
       .clk_i        (clk),
@@ -70,7 +72,20 @@ module amber48_core_tb;
       .trap_o         (dmem_trap),
       .led_o          (led_bus),
       .uart_tx_valid_o(uart_tx_valid),
-      .uart_tx_data_o (uart_tx_data)
+      .uart_tx_data_o (uart_tx_data),
+      .uart_tx_ready_i(uart_tx_ready)
+  );
+
+  amber48_uart_tx #(
+      .CLOCK_FREQ_HZ(100_000_000),
+      .BAUD_RATE    (115_200)
+  ) u_uart_tx (
+      .clk_i  (clk),
+      .rst_ni (rst_ni),
+      .data_i (uart_tx_data),
+      .valid_i(uart_tx_valid),
+      .ready_o(uart_tx_ready),
+      .tx_o   (uart_tx)
   );
 
   // Clock generation: 10 ns period

@@ -15,7 +15,8 @@ module amber48_dmem
     output logic                  trap_o,
     output logic [7:0]            led_o,
     output logic                  uart_tx_valid_o,
-    output logic [7:0]            uart_tx_data_o
+    output logic [7:0]            uart_tx_data_o,
+    input  logic                  uart_tx_ready_i
 );
 
   localparam int unsigned ADDR_LSB     = $clog2(BAU_BYTES);
@@ -70,9 +71,22 @@ module amber48_dmem
 
       if (req_i) begin
         if (misaligned || out_of_bounds) begin
-          trap_o <= 1'b1;
+          trap_o  <= 1'b1;
           rdata_o <= '0;
           ready_o <= 1'b1;
+        end else if (is_mmio_uart) begin
+          if (we_i) begin
+            uart_q <= wdata_i[7:0];
+            if (uart_tx_ready_i) begin
+              uart_tx_data_o  <= wdata_i[7:0];
+              uart_tx_valid_o <= 1'b1;
+              rdata_o         <= {{(XLEN-8){1'b0}}, wdata_i[7:0]};
+              ready_o         <= 1'b1;
+            end
+          end else begin
+            rdata_o <= {{(XLEN-8){1'b0}}, uart_q};
+            ready_o <= 1'b1;
+          end
         end else begin
           logic [XLEN-1:0] mem_rdata;
           mem_rdata = ram[addr_index];
@@ -80,10 +94,6 @@ module amber48_dmem
           if (we_i) begin
             if (is_mmio_led) begin
               led_q <= wdata_i[7:0];
-            end else if (is_mmio_uart) begin
-              uart_q          <= wdata_i[7:0];
-              uart_tx_data_o  <= wdata_i[7:0];
-              uart_tx_valid_o <= 1'b1;
             end else begin
               ram[addr_index] <= wdata_i;
               mem_rdata        = wdata_i;
@@ -92,8 +102,6 @@ module amber48_dmem
 
           if (is_mmio_led) begin
             rdata_o <= {{(XLEN-8){1'b0}}, led_q};
-          end else if (is_mmio_uart) begin
-            rdata_o <= {{(XLEN-8){1'b0}}, uart_q};
           end else begin
             rdata_o <= mem_rdata;
           end
