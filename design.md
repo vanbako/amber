@@ -7,6 +7,72 @@ Everything-addresses, offsets, caches, pages-is expressed in **BAUs**.
 
 This assumes a **clean-slate environment**: there are **no compatibility constraints** with legacy ISAs, operating systems, toolchains, language ABIs, RFCs, character encodings, floating-point formats, or other external standards. Every encoding and convention is free to prioritize BAU-native behavior.
 
+### Acronym glossary
+
+- **ABI** - Application Binary Interface.
+- **ALU** - Arithmetic Logic Unit for 48-bit scalar and packed operations.
+- **ASID** - Address Space Identifier used to tag TLB entries.
+- **BADVADDR** - Bad Virtual Address register that records the faulting VA.
+- **BAU** - Base Address Unit, the architecture's 48-bit fundamental addressing granularity.
+- **BAR** - Base Address Register describing a device's MMIO window.
+- **CAUSE** - Trap cause register that reports the reason for an exception.
+- **CHERI** - Capability Hardware Enhanced RISC Instructions capability model.
+- **CPUID** - Processor identification register.
+- **CSR** - Control and Status Register.
+- **D$** - Data cache.
+- **DCFG** - Data-cache configuration register.
+- **DMA** - Direct Memory Access for enid endpoints and the CPU.
+- **DMACTL** - DMA control CSR that exposes the `sync_dma` fence and fabric status.
+- **DSP** - Digital Signal Processor (e.g., audio module).
+- **EPC** - Exception Program Counter saved on traps.
+- **EX** - Execute pipeline stage.
+- **GP** - Global Pointer register (`r13`).
+- **GPIO** - General-Purpose Input/Output.
+- **GPR** - General-Purpose Register.
+- **GPU** - Graphics Processing Unit module class.
+- **HFCP** - Hardware Flow-Control Protection token mechanism.
+- **HID** - Human Interface Device.
+- **IA** - Instruction Address front-end stage.
+- **ICFG** - Instruction-cache configuration register.
+- **ID** - Instruction Decode pipeline stage.
+- **IE** - Interrupt Enable bit in the STATUS register.
+- **IF** - Instruction Fetch pipeline stage.
+- **I$** - Instruction cache.
+- **IPI** - Inter-Processor Interrupt.
+- **IRQ** - Interrupt Request signal.
+- **ISA** - Instruction Set Architecture.
+- **IVEC** - Interrupt vector table capability register.
+- **LR** - Link Register (`r15`).
+- **MA** - Memory Access pipeline stage.
+- **MF** - Memory Fill pipeline stage.
+- **MMIO** - Memory-Mapped Input/Output.
+- **MSI** - Message Signaled Interrupt delivered over enid.
+- **MMU** - Memory Management Unit.
+- **MVP** - Minimum Viable Product baseline configuration.
+- **NZCV** - Negative, Zero, Carry, Overflow condition flags.
+- **NPU** - Neural Processing Unit accelerator.
+- **PA** - Physical Address.
+- **PC** - Program Counter.
+- **PCIe** - Peripheral Component Interconnect Express.
+- **PTBR** - Page Table Base Register.
+- **PTE** - Page Table Entry.
+- **PHY** - Physical layer transceiver for high-speed links.
+- **RFC** - Request for Comments internet standard.
+- **RC** - Root Complex managing the enid fabric.
+- **SerDes** - Serializer/Deserializer link technology.
+- **SoC** - System on Chip.
+- **SP** - Stack Pointer (`r14`).
+- **SSP** - Shadow Stack Pointer used by HFCP.
+- **TLB** - Translation Lookaside Buffer.
+- **TLBCFG** - TLB configuration register.
+- **UI** - Upper Immediate latch for wide immediates.
+- **VA** - Virtual Address.
+- **VPN0** - Level-0 Virtual Page Number field.
+- **VPN1** - Level-1 Virtual Page Number field.
+- **VPN2** - Level-2 Virtual Page Number field.
+- **WB** - Write Back pipeline stage.
+- **XT** - eXTract pipeline stage that unpacks instruction syllables.
+
 ### Assembler naming (lowercase only)
 
 Amber48 adopts custom lowercase mnemonics instead of the usual assembly names.
@@ -41,6 +107,18 @@ These names appear in opcode tables and documentation wherever an `isa` column i
 * **ISA features:** 48-bit/24-bit arithmetic (no mul/div yet), logic & shifts/rotates, branches, compare/test, CSR, `jump_sub/return/push/pop` via micro-ops.
 * **MMU:** 48-bit VA -> (<=42-bit PA), with capability checks in parallel.
 
+### enid I/O fabric
+
+* **Link family:** `enid` is a 48-bit, dual-simplex SerDes fabric with credit-based flow control and 12b/13b framing. It mirrors PCIe-style transaction ordering but carries BAU-sized payloads so every request and completion aligns with the native 48-bit width.
+* **Root complex (3-port):**
+  * **Port 0:** uplink into the enid switch/backplane that fans out to additional slots.
+  * **Port 1:** left module bay (hot-swappable).
+  * **Port 2:** right module bay (hot-swappable).
+* **Module classes:** switch expansion sleds, discrete GPU, audio DSP, mass storage, human-interface, wired/wireless network, and NPU accelerators all plug into the same enid connector and capability hand-off.
+* **Discovery:** each port exposes a capability-based configuration window (`config_cap`) describing vendor/device IDs, BAR layout, MSI vectors, and security policy. Firmware probes the three root ports, walks any downstream switch, and installs per-device capabilities for the OS.
+* **Transactions:** memory reads/writes and doorbells carry 48-bit BAU addresses. DMA engines present capability tokens (issued by firmware) with explicit bounds, allowing the root complex to clamp errant masters before the request leaves the CPU tile.
+
+
 ---
 
 ## 1) Memory model (BAU-native)
@@ -62,6 +140,14 @@ These names appear in opcode tables and documentation wherever an `isa` column i
 ## 2) Loads/Stores (BAU-wide only)
 
 All addressing is `capability + integer_base + offBAU` with **offBAU** in BAUs. Every memory transfer moves exactly one BAU (48 bits); packed 24-bit lanes are handled via register operations after the load and before the store.
+
+### enid MMIO & DMA semantics
+
+* **Configuration:** each enumerated enid function exposes a 4-BAU control aperture via its `config_cap`; drivers discover BARs, MSI vectors, and doorbells entirely through capability loads/stores.
+* **MMIO ordering:** CPU-issued MMIO writes toward enid endpoints are strongly ordered; the root complex posts them but only reports completion after the downstream link accepts the packet. Reads are non-posted and complete in request order per-function.
+* **DMA addressing:** endpoints emit BAU-granular reads/writes tagged with their capability tokens. The root complex validates the token, clamps the transfer to the advertised bounds, and rewrites the BAU address into system physical space.
+* **Doorbells:** BAU-wide doorbell writes (e.g., queue tail pointers) are translated into sideband messages so software never depends on sub-BAU semantics. Optional remote atomics are limited to whole-BAU compare-and-swap/add sequences when the device advertises support.
+* **Isolation:** firmware may revoke or shrink a device token at runtime; subsequent DMA attempts fault as `CapFault` at the root complex and raise an interrupt for containment.
 
 * **Implicit-cap (via `cDDC`):**
 
@@ -168,6 +254,7 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
 * `EPC`, `CAUSE`, `BADVADDR`
 * `PTBR`, `TLBCFG`
 * `ICFG`, `DCFG`
+* `DMACTL` (`sync_dma` fence bit, enid flow-control status)
 * `IVEC` (interrupt vector table capability)
 * `UI` (upper-immediate latch)
 * `KEY0` (HFCP)
@@ -184,7 +271,14 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
 * **Large pages:** set size bit at level-1 PTE -> use **BAU\_off\[23:0]** and skip last lookup.
 * **TLB:** ASID-tagged; entry records page size.
 * **Permissions:** R/W/X/U; capability checks happen after translation.
-* **Traps:** PageFaultI/D, PrivFault, AlignFault, CapFault, CFault (HFCP), Illegal, Syscall.
+
+### enid address map & capability windows
+
+* **System DRAM:** `BAU[0x0000_0000_0000 .. 0x000F_FFFF_FFFF]` remains cacheable and shareable across CPU harts and coherent accelerators.
+* **enid RC configuration:** `BAU[0xFFF0_0000_0000 .. 0xFFF0_0000_0FFF]` maps the three root-complex capability windows (`config_cap[0..2]`). Access is non-cacheable and requires privileged capability permissions.
+* **enid doorbells & queues:** `BAU[0xFFF0_0001_0000 .. 0xFFF0_000F_FFFF]` provides per-device, per-queue BAU slots that drivers program as MMIO doorbells; firmware allocates disjoint ranges when enumerating the fabric.
+* **Hot-plug spares:** `BAU[0xFFF0_0010_0000 .. 0xFFF0_001F_FFFF]` is reserved so late-bound modules can map BARs without relocating existing devices.
+* **Capability hand-off:** each discovered endpoint receives a sealed data capability pointing at its MMIO window plus (optionally) a second capability for inbound DMA buffers; software never hands out raw physical BAUs.
 
 ---
 
@@ -196,6 +290,7 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
 * Entry follows the standard trap path: pipeline drains, `EPC` latches the syllable-aligned return PC, and `STATUS.IE` is cleared until the handler issues `sys_return`.
 * Vector dispatch reads `IVEC` (capability CSR for the interrupt table); each vector entry stores a sealed handler capability so ordinary capability checks still apply on entry.
 * Nested hardware interrupts are allowed when the handler sets `STATUS.IE=1` after saving live state; priority resolution is strictly descending by line index (0 = highest).
+* **enid MSI bridge:** enid endpoints raise interrupts by issuing 48-bit MSI messages. The root complex translates each message into a core hardware line, populates `CAUSE[15:8]` with the requester ID, and can steer vectors per-port for isolation. Firmware programs the MSI table during enumeration.
 * `TIMER` and platform GPIO sources wire in through the same mechanism; additional SoC devices extend the vector space without architecturally visible changes.
 
 ### Software interrupts
@@ -214,7 +309,12 @@ All packed ops operate on **two independent 24-bit lanes** inside each 48-bit re
 * **D\$:** 16 lines x 16 BAU/line (**256 BAU** total). Direct-mapped MVP, write-through (write-back later).
   Capability and MMU perms enforced at **MF**.
 
-> Associativity/size are fields in `ICFG/DCFG` so you can scale later without ABI changes.
+### DMA visibility & coherence
+
+* enid inbound writes land in memory behind the D$ write-through path; the fabric is **not** hardware-coherent. Drivers must invalidate cache lines covering DMA destinations before handing buffers to devices.
+* Outbound DMA reads observe the most recent committed D$ state because write-through pushes data to memory immediately; for explicit dirty data, software toggles the `DMACTL.sync_dma` fence before ringing an enid doorbell.
+* Firmware can optionally grant read-only snoop permissions to accelerators that advertise coherency; otherwise, capabilities for shared buffers must be marked non-cacheable.
+* The `DMACTL.sync_dma` bit also lets software force completion of all posted enid writes before sampling device status or recycling descriptors.
 
 ---
 
@@ -239,6 +339,7 @@ IA -> IF -> XT -> ID -> EX -> MA -> MF -> WB
 - **Upper-immediate latch misuse:** any `.ext` consumer relies on a fresh `upper_imm`; failing to clear or refill the UI latch silently builds the wrong wide immediate without a validity trap.
 - **Packed saturation visibility:** `.s` packed ops only report summary NZCV flags unless the optional lane mask CSR is implemented, hiding per-lane overflow from software that expects it.
 - **TLB size-bit aliasing:** large-page entries bypass the final level; inconsistent size bits or stale ASIDs can hand different permission sets to the same BAU, generating capability or privilege faults at MA/MF.
+- **enid DMA visibility:** failing to fence or flush around non-coherent enid transfers leaves software observing stale data or double-writing queue entries; drivers must toggle `DMACTL.sync_dma` around doorbells so posted writes settle before reuse.
 
 ---
 
@@ -339,5 +440,9 @@ land 0x12
 * [ ] Scalar 48-bit ALU + packed 24-bit ALU (`.u` & `.s`).
 * [ ] CSR access; `upper_imm` + UI latch for wide immediates.
 * [ ] Traps/IRQs; `jump_sub/return/push/pop` via micro-ops; HFCP token check.
+* [ ] enid PHY + SerDes bring-up (lane training, framing, link reset).
+* [ ] enid 3-port root complex with MSI bridge and capability validation.
+* [ ] enid switch enumeration firmware: discover ports, allocate MMIO/DMA capabilities, program MSI vectors.
+* [ ] Driver-model hooks for enid modules (GPU, audio, storage, HID, network, NPU) covering MMIO, DMA, and interrupt setup.
 
 ---
