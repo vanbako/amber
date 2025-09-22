@@ -11,12 +11,12 @@ Amber48 is a clean-slate 48-bit architecture built around Base Address Units (BA
 
 ## Document Map
 
-- [`details/isa.md`](details/isa.md) — Instruction set, assembler conventions, memory model, and packed arithmetic behavior.
-- [`details/system.md`](details/system.md) — Control/status registers, MMU layout, interrupt fabric, caches, pipeline timing, and hazard guidance.
-- [`details/capabilities.md`](details/capabilities.md) — Capability storage rules and lane-aware pointer math for 24-bit data structures.
-- [`details/abi.md`](details/abi.md) — Calling convention, stack discipline, and representative assembly snippets.
-- [`details/checklist.md`](details/checklist.md) — Bring-up checklist for a minimal Amber48 hardware/software stack.
-- [`details/glossary.md`](details/glossary.md) — Acronyms and terminology used throughout the documents.
+- [`design/isa.md`](design/isa.md) — Instruction set, assembler conventions, memory model, and packed arithmetic behavior.
+- [`design/system.md`](design/system.md) — Control/status registers, MMU layout, interrupt fabric, caches, pipeline timing, and hazard guidance.
+- [`design/capabilities.md`](design/capabilities.md) — Capability storage rules and lane-aware pointer math for 24-bit data structures.
+- [`design/abi.md`](design/abi.md) — Calling convention, stack discipline, and representative assembly snippets.
+- [`design/checklist.md`](design/checklist.md) — Bring-up checklist for a minimal Amber48 hardware/software stack.
+- [`design/glossary.md`](design/glossary.md) — Acronyms and terminology used throughout the documents.
 
 ## High-Level Roadmap
 
