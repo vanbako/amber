@@ -2,7 +2,7 @@
 set proj_dir [file normalize [pwd]]
 set proj_name amber48_top
 set impl_name impl_1
-set device_part GW2AR-LV18QN88C6/I5
+set device_part GW5AST-LV138PG484AC1/I0
 set top_module amber48_top
 
 if {[file exists ${proj_dir}/${proj_name}.gpr]} {

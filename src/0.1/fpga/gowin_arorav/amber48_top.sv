@@ -1,11 +1,12 @@
 module amber48_top
   import amber48_pkg::*;
 (
-    input  logic clk_27mhz_i,
-    input  logic rst_button_ni,
+    input  logic sys_clk,
+    input  logic sys_rst_n,
     output logic led0_o,
     output logic [7:0] led_mmio_o,
-    output logic       uart_tx_o,
+    output logic       txp,
+    input  logic       rxp,
     output logic       uart_tx_valid_o,
     output logic [7:0] uart_tx_data_o
 );
@@ -34,13 +35,13 @@ module amber48_top
   logic [7:0]      uart_tx_data;
 
   reset_sync u_reset_sync (
-      .clk_i (clk_27mhz_i),
-      .rst_ni(rst_button_ni),
+      .clk_i (sys_clk),
+      .rst_ni(sys_rst_n),
       .rst_no(rst_sync_n)
   );
 
   amber48_core u_core (
-      .clk_i        (clk_27mhz_i),
+      .clk_i        (sys_clk),
       .rst_ni       (rst_sync_n),
       .clk_en_i     (1'b1),
       .imem_addr_o  (imem_addr),
@@ -61,7 +62,7 @@ module amber48_top
   amber48_imem #(
       .INIT_FILE("build/amber48_smoke.hex")
   ) u_imem (
-      .clk_i  (clk_27mhz_i),
+      .clk_i  (sys_clk),
       .rst_ni (rst_sync_n),
       .addr_i (imem_addr),
       .data_o (imem_data),
@@ -71,7 +72,7 @@ module amber48_top
   amber48_dmem #(
       .INIT_FILE("")
   ) u_dmem (
-      .clk_i          (clk_27mhz_i),
+      .clk_i          (sys_clk),
       .rst_ni         (rst_sync_n),
       .req_i          (dmem_req),
       .we_i           (dmem_we),
@@ -93,19 +94,19 @@ module amber48_top
       .CLOCK_FREQ_HZ(27_000_000),
       .BAUD_RATE    (115_200)
   ) u_uart_tx (
-      .clk_i  (clk_27mhz_i),
+      .clk_i  (sys_clk),
       .rst_ni (rst_sync_n),
       .data_i (uart_tx_data),
       .valid_i(uart_tx_valid),
       .ready_o(uart_tx_ready),
-      .tx_o   (uart_tx_o)
+      .tx_o   (txp)
   );
 
   assign uart_tx_valid_o = uart_tx_valid;
   assign uart_tx_data_o  = uart_tx_data;
 
   // Simple heartbeat toggles each retired instruction.
-  always_ff @(posedge clk_27mhz_i or negedge rst_sync_n) begin
+  always_ff @(posedge sys_clk or negedge rst_sync_n) begin
     if (!rst_sync_n) begin
       heartbeat_q <= 1'b0;
     end else if (retired) begin
