@@ -83,7 +83,10 @@ module amber48_top
       .led_o          (led_bus),
       .uart_tx_valid_o(uart_tx_valid),
       .uart_tx_data_o (uart_tx_data),
-      .uart_tx_ready_i(uart_tx_ready)
+      .uart_tx_ready_i(uart_tx_ready),
+      .aux_en_i       (1'b0),
+      .aux_addr_i     ('0),
+      .aux_rdata_o    ()
   );
 
   amber48_uart_tx #(

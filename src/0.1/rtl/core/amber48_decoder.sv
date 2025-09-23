@@ -27,6 +27,9 @@ module amber48_decoder
   localparam logic [7:0] OPCODE_BRANCH_ALWAYS  = 8'h48;
   localparam logic [7:0] OPCODE_LOAD           = 8'h60;
   localparam logic [7:0] OPCODE_STORE          = 8'h61;
+  localparam logic [7:0] OPCODE_JUMP           = 8'h70;
+  localparam logic [7:0] OPCODE_JUMP_SUB       = 8'h71;
+  localparam logic [7:0] OPCODE_RETURN         = 8'h72;
 
   amber48_decode_out_s              decode_r;
   logic [7:0]                       opcode;
@@ -34,6 +37,8 @@ module amber48_decoder
   logic [REG_ADDR_WIDTH-1:0]        rs1_field;
   logic [REG_ADDR_WIDTH-1:0]        rs2_field;
   logic [XLEN-1:0]                  imm_ext;
+  logic [23:0]                      upper_imm_field;
+  logic [XLEN-1:0]                  upper_imm_value;
 
   always_comb begin
     decode_r            = '0;
@@ -42,6 +47,8 @@ module amber48_decoder
     rs1_field           = fetch_i.instr[23:20];
     rs2_field           = fetch_i.instr[19:16];
     imm_ext             = {{(XLEN-16){fetch_i.instr[39]}}, fetch_i.instr[39:24]};
+    upper_imm_field    = fetch_i.instr[39:16];
+    upper_imm_value    = {upper_imm_field, 24'b0};
 
     decode_r.valid      = fetch_i.valid;
     decode_r.pc         = fetch_i.pc;
@@ -61,6 +68,9 @@ module amber48_decoder
       OPCODE_UPPER_IMM: begin
         decode_r.alu_op   = ALU_PASS;
         decode_r.uses_imm = 1'b1;
+        decode_r.rs1      = REG_ZERO;
+        decode_r.rs2      = REG_ZERO;
+        decode_r.imm      = upper_imm_value;
       end
       OPCODE_ADD_REG: begin
         decode_r.alu_op = ALU_ADD;
@@ -134,6 +144,33 @@ module amber48_decoder
         decode_r.rd          = '0;
         decode_r.rs2         = '0;
       end
+      OPCODE_JUMP: begin
+        decode_r.branch_type = BR_UNCOND;
+        decode_r.rs1         = REG_ZERO;
+        decode_r.rs2         = REG_ZERO;
+        decode_r.rd          = REG_ZERO;
+        decode_r.uses_imm    = 1'b1;
+        decode_r.imm         = imm_ext;
+        decode_r.is_jump     = 1'b1;
+      end
+      OPCODE_JUMP_SUB: begin
+        decode_r.branch_type = BR_UNCOND;
+        decode_r.rs1         = REG_ZERO;
+        decode_r.rs2         = REG_ZERO;
+        decode_r.rd          = REG_LR;
+        decode_r.uses_imm    = 1'b1;
+        decode_r.imm         = imm_ext;
+        decode_r.is_jump_sub = 1'b1;
+      end
+      OPCODE_RETURN: begin
+        decode_r.branch_type = BR_UNCOND;
+        decode_r.rs1         = (rs1_field == REG_ZERO) ? REG_LR : rs1_field;
+        decode_r.rs2         = REG_ZERO;
+        decode_r.rd          = REG_ZERO;
+        decode_r.uses_imm    = 1'b0;
+        decode_r.imm         = '0;
+        decode_r.is_return   = 1'b1;
+      end
       OPCODE_LOAD: begin
         decode_r.load      = 1'b1;
         decode_r.uses_imm  = 1'b1;
@@ -156,3 +193,6 @@ module amber48_decoder
   assign decode_o = decode_r;
 
 endmodule
+
+
+

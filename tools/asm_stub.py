@@ -10,6 +10,7 @@ from typing import Iterable, List, Tuple
 
 # Architecture parameters for the 0.1 prototype
 IMEM_DEPTH = 256
+DMEM_DEPTH = 256
 BAU_BYTES = 8
 
 # Opcode map mirrored from amber48_decoder.sv
@@ -36,6 +37,9 @@ OPCODES = {
     "branch_always": 0x48,
     "load": 0x60,
     "store": 0x61,
+    "jump": 0x70,
+    "jump_sub": 0x71,
+    "return": 0x72,
 }
 
 REGISTER_ALIASES = {
@@ -114,6 +118,12 @@ def encode_imm16(value: int, line_num: int) -> int:
     if value < -(1 << 15) or value >= (1 << 15):
         raise AssemblerError(f"Line {line_num}: immediate {value} exceeds 16-bit signed range")
     return value & 0xFFFF
+ 
+def encode_imm24(value: int, line_num: int) -> int:
+    if value < 0 or value >= (1 << 24):
+        raise AssemblerError(f"Line {line_num}: immediate {value} exceeds 24-bit unsigned range")
+    return value & 0xFFFFFF
+
 
 
 def pack_instruction(opcode: int, imm: int, rs1: int, rs2: int, rd: int) -> int:
@@ -123,6 +133,13 @@ def pack_instruction(opcode: int, imm: int, rs1: int, rs2: int, rd: int) -> int:
     word |= (rs2 & 0xF) << 16
     word |= (rd & 0xF) << 12
     return word
+
+def pack_upper_imm(rd: int, imm: int) -> int:
+    word = (OPCODES["upper_imm"] & 0xFF) << 40
+    word |= (imm & 0xFFFFFF) << 16
+    word |= (rd & 0xF) << 12
+    return word
+
 
 
 def parse_program(text: str) -> Tuple[List[Instruction], dict[str, int]]:
@@ -170,6 +187,14 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
 
     opcode = OPCODES[mnem]
 
+    if mnem == "upper_imm":
+        if len(inst.args) != 2:
+            raise AssemblerError(f"Line {inst.line_num}: upper_imm expects rd, imm24")
+        rd = parse_register(inst.args[0], inst.line_num)
+        imm_value = parse_immediate(inst.args[1], inst.line_num)
+        imm = encode_imm24(imm_value, inst.line_num)
+        return pack_upper_imm(rd, imm)
+
     if mnem == "add_imm":
         if len(inst.args) != 3:
             raise AssemblerError(f"Line {inst.line_num}: add_imm expects rd, rs1, imm")
@@ -204,6 +229,32 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
         imm = encode_imm16(offset, inst.line_num)
         return pack_instruction(opcode, imm, 0, 0, 0)
 
+    if mnem == "jump":
+        if len(inst.args) != 1:
+            raise AssemblerError(f"Line {inst.line_num}: jump expects a label")
+        target_pc = resolve_label(inst.args[0], labels, inst.line_num)
+        offset = target_pc - inst.pc
+        imm = encode_imm16(offset, inst.line_num)
+        return pack_instruction(opcode, imm, 0, 0, 0)
+
+    if mnem == "jump_sub":
+        if len(inst.args) != 1:
+            raise AssemblerError(f"Line {inst.line_num}: jump_sub expects a label")
+        target_pc = resolve_label(inst.args[0], labels, inst.line_num)
+        offset = target_pc - inst.pc
+        imm = encode_imm16(offset, inst.line_num)
+        rd = REGISTER_ALIASES["lr"]
+        return pack_instruction(opcode, imm, 0, 0, rd)
+
+    if mnem == "return":
+        if len(inst.args) > 1:
+            raise AssemblerError(f"Line {inst.line_num}: return accepts optional rs1")
+        if inst.args:
+            rs1 = parse_register(inst.args[0], inst.line_num)
+        else:
+            rs1 = REGISTER_ALIASES["lr"]
+        return pack_instruction(opcode, encode_imm16(0, inst.line_num), rs1, 0, 0)
+
     if mnem == "load":
         if len(inst.args) != 2:
             raise AssemblerError(f"Line {inst.line_num}: load expects rd, offset(base)")
@@ -223,8 +274,6 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
         return pack_instruction(opcode, encode_imm16(imm, inst.line_num), base, rs2, 0)
 
     raise AssemblerError(f"Line {inst.line_num}: mnemonic '{mnem}' is not yet implemented")
-
-
 def parse_memory_operand(token: str, line_num: int) -> Tuple[int, int]:
     token = token.strip()
     if not token:
@@ -252,13 +301,16 @@ def assemble(text: str) -> List[int]:
     return words
 
 
-def write_hex(words: Iterable[int], path: Path) -> None:
+def write_hex(words: Iterable[int], path: Path, depth: int) -> None:
     rows = list(words)
-    if len(rows) < IMEM_DEPTH:
-        rows.extend(0 for _ in range(IMEM_DEPTH - len(rows)))
+    if len(rows) > depth:
+        raise AssemblerError(f"Hex image uses {len(rows)} rows, exceeds depth {depth}")
+    if len(rows) < depth:
+        rows.extend(0 for _ in range(depth - len(rows)))
     with path.open("w", encoding="ascii") as handle:
         for value in rows:
             handle.write(f"{value:012x}\n")
+
 
 
 def main() -> None:
@@ -277,16 +329,33 @@ def main() -> None:
         default=Path("build/amber48_smoke.hex"),
         help="Target hex file path (default: build/amber48_smoke.hex)",
     )
+    parser.add_argument(
+        "--dmem-output",
+        type=Path,
+        default=None,
+        help="Optional data memory hex path (default: derived from --output)",
+    )
     args = parser.parse_args()
 
     text = args.stub.read_text(encoding="ascii")
     words = assemble(text)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    write_hex(words, args.output)
+    write_hex(words, args.output, IMEM_DEPTH)
 
+    dmem_path = args.dmem_output
+    if dmem_path is None:
+        suffix = args.output.suffix
+        stem = args.output.stem
+        dmem_name = f"{stem}_dmem{suffix}"
+        dmem_path = args.output.with_name(dmem_name)
+    dmem_path.parent.mkdir(parents=True, exist_ok=True)
+    write_hex([0], dmem_path, DMEM_DEPTH)
 
 if __name__ == "__main__":
     try:
         main()
     except AssemblerError as err:
         raise SystemExit(str(err))
+
+
+

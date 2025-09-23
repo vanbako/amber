@@ -16,7 +16,10 @@ module amber48_dmem
     output logic [7:0]            led_o,
     output logic                  uart_tx_valid_o,
     output logic [7:0]            uart_tx_data_o,
-    input  logic                  uart_tx_ready_i
+    input  logic                  uart_tx_ready_i,
+    input  logic                  aux_en_i,
+    input  logic [XLEN-1:0]       aux_addr_i,
+    output logic [XLEN-1:0]       aux_rdata_o
 );
 
   localparam int unsigned ADDR_LSB     = $clog2(BAU_BYTES);
@@ -27,6 +30,8 @@ module amber48_dmem
 
   logic [XLEN-1:0]              ram [0:DEPTH-1];
   logic [INDEX_WIDTH-1:0]       addr_index;
+  logic [INDEX_WIDTH-1:0]       aux_addr_index;
+  logic [XLEN-1:0]              aux_rdata_q;
   logic                         misaligned;
   logic                         out_of_bounds;
   logic                         is_mmio_led;
@@ -49,6 +54,7 @@ module amber48_dmem
   end
 
   assign addr_index = addr_i[ADDR_LSB +: INDEX_WIDTH];
+  assign aux_addr_index = aux_addr_i[ADDR_LSB +: INDEX_WIDTH];
   assign misaligned = (ADDR_LSB == 0) ? 1'b0 : |addr_i[ADDR_LSB-1:0];
   assign out_of_bounds = (HIGH_MSB >= XLEN) ? 1'b0 : |addr_i[XLEN-1:HIGH_MSB];
   assign is_mmio_led  = (addr_index == MMIO_LED_IDX);
@@ -112,6 +118,14 @@ module amber48_dmem
 
       led_o <= led_q;
     end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      aux_rdata_q <= '0;
+    end else if (aux_en_i) begin
+      aux_rdata_q <= ram[aux_addr_index];
+    end
   end
+  assign aux_rdata_o = aux_rdata_q;
 
 endmodule

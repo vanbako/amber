@@ -9,6 +9,7 @@ module amber48_alu
   logic [XLEN-1:0]      operand_b;
   logic [5:0]           shamt;
   logic [XLEN-1:0]      branch_cmp_b;
+  logic [XLEN-1:0]      return_addr;
   logic                 trap_active;
 
   always_comb begin
@@ -21,6 +22,7 @@ module amber48_alu
     ex_r.store         = ex_i.store;
     ex_r.branch_taken  = 1'b0;
     ex_r.branch_target = ex_i.pc + ex_i.imm;
+    return_addr       = ex_i.pc + BAU_BYTES;
 
     operand_b          = ex_i.uses_imm ? ex_i.imm : ex_i.op_b;
     branch_cmp_b       = ex_i.op_b;
@@ -73,6 +75,14 @@ module amber48_alu
         ex_r.branch_taken = 1'b0;
       end
     endcase
+    if (ex_i.is_return) begin
+      ex_r.branch_taken  = ex_i.valid;
+      ex_r.branch_target = ex_i.op_a;
+    end
+
+    if (ex_i.is_jump_sub) begin
+      ex_r.result = return_addr;
+    end
 
     trap_active       = ex_i.trap || (ex_i.trap_cause != TRAP_NONE);
     ex_r.trap         = trap_active;

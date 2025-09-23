@@ -7,6 +7,12 @@ package amber48_pkg;
   localparam int unsigned DMEM_DEPTH        = 256;
   localparam int unsigned BAU_BYTES         = 8;  // 64-bit byte addressable unit
 
+  localparam logic [REG_ADDR_WIDTH-1:0] REG_ZERO = '0;
+  localparam logic [REG_ADDR_WIDTH-1:0] REG_SP   = 4'd13;
+  localparam logic [REG_ADDR_WIDTH-1:0] REG_LR   = 4'd14;
+  localparam logic [REG_ADDR_WIDTH-1:0] REG_SSP  = 4'd15;
+
+
   typedef enum logic [3:0] {
     ALU_ADD,
     ALU_SUB,
@@ -48,6 +54,9 @@ package amber48_pkg;
     logic [XLEN-1:0]           pc;
     logic [REG_ADDR_WIDTH-1:0] rs1;
     logic [REG_ADDR_WIDTH-1:0] rs2;
+    logic                      is_jump;
+    logic                      is_jump_sub;
+    logic                      is_return;
     logic [REG_ADDR_WIDTH-1:0] rd;
     amber48_alu_op_e           alu_op;
     logic [XLEN-1:0]           imm;
@@ -55,6 +64,9 @@ package amber48_pkg;
     amber48_branch_e           branch_type;
     logic                      load;
     logic                      store;
+    logic                      is_jump;
+    logic                      is_jump_sub;
+    logic                      is_return;
     logic                      trap;
     amber48_trap_e             trap_cause;
   } amber48_decode_out_s;
@@ -68,6 +80,9 @@ package amber48_pkg;
     logic [XLEN-1:0]           imm;
     logic                      uses_imm;
     amber48_branch_e           branch_type;
+    logic                      is_jump;
+    logic                      is_jump_sub;
+    logic                      is_return;
     logic [REG_ADDR_WIDTH-1:0] rd;
     logic [XLEN-1:0]           store_data;
     logic                      writeback_en;

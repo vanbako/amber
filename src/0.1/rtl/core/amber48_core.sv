@@ -21,7 +21,6 @@ module amber48_core
 );
 
     localparam logic [XLEN-1:0]           PC_INCREMENT = BAU_BYTES;
-  localparam logic [REG_ADDR_WIDTH-1:0] REG_ZERO     = '0;
 
   logic [XLEN-1:0]        pc_q;
   logic [XLEN-1:0]        pc_next;
@@ -128,12 +127,16 @@ module amber48_core
     ex_stage_next.uses_imm     = id_stage_q.uses_imm;
     ex_stage_next.alu_op       = id_stage_q.alu_op;
     ex_stage_next.branch_type  = id_stage_q.branch_type;
+    ex_stage_next.is_jump      = id_stage_q.is_jump;
+    ex_stage_next.is_jump_sub  = id_stage_q.is_jump_sub;
+    ex_stage_next.is_return    = id_stage_q.is_return;
     ex_stage_next.rd           = id_stage_q.rd;
     ex_stage_next.store_data   = rf_rs2;
     ex_stage_next.writeback_en = id_stage_q.valid && !id_stage_q.trap &&
-                                 !id_stage_q.store &&
-                                 (id_stage_q.branch_type == BR_NONE) &&
-                                 (id_stage_q.rd != REG_ZERO);
+                                 ((!id_stage_q.store &&
+                                   (id_stage_q.branch_type == BR_NONE) &&
+                                   (id_stage_q.rd != REG_ZERO)) ||
+                                  id_stage_q.is_jump_sub);
     ex_stage_next.load         = id_stage_q.load;
     ex_stage_next.store        = id_stage_q.store;
     ex_stage_next.trap         = id_stage_q.trap;
@@ -182,3 +185,4 @@ module amber48_core
   assign retired_o    = writeback_en || store_commit;
 
 endmodule
+
