@@ -44,7 +44,7 @@ module amber48_uart_tx #(
       case (state_q)
         IDLE: begin
           tx_o      <= 1'b1;
-          clk_cnt_q <= CLKS_PER_BIT - 1;
+          clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
           bit_idx_q <= '0;
           if (valid_i) begin
             data_q    <= data_i;
@@ -56,7 +56,7 @@ module amber48_uart_tx #(
         START: begin
           if (clk_cnt_q == 0) begin
             state_q   <= DATA;
-            clk_cnt_q <= CLKS_PER_BIT - 1;
+            clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
             tx_o      <= data_q[0];
             bit_idx_q <= '0;
           end else begin
@@ -69,11 +69,11 @@ module amber48_uart_tx #(
           if (clk_cnt_q == 0) begin
             if (bit_idx_q == 3'd7) begin
               state_q   <= STOP;
-              clk_cnt_q <= CLKS_PER_BIT - 1;
+              clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
               tx_o      <= 1'b1;
             end else begin
               bit_idx_q <= bit_idx_q + 1;
-              clk_cnt_q <= CLKS_PER_BIT - 1;
+              clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
               tx_o      <= data_q[bit_idx_q + 1];
             end
           end else begin

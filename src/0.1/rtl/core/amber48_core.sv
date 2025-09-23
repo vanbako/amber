@@ -20,7 +20,7 @@ module amber48_core
     input  logic                 dmem_trap_i
 );
 
-    localparam logic [XLEN-1:0]           PC_INCREMENT = BAU_BYTES;
+    localparam logic [XLEN-1:0]           PC_INCREMENT = XLEN'(BAU_BYTES);
 
   logic [XLEN-1:0]        pc_q;
   logic [XLEN-1:0]        pc_next;
@@ -185,4 +185,3 @@ module amber48_core
   assign retired_o    = writeback_en || store_commit;
 
 endmodule
-

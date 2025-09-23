@@ -22,7 +22,7 @@ module amber48_alu
     ex_r.store         = ex_i.store;
     ex_r.branch_taken  = 1'b0;
     ex_r.branch_target = ex_i.pc + ex_i.imm;
-    return_addr       = ex_i.pc + BAU_BYTES;
+    return_addr        = ex_i.pc + XLEN'(BAU_BYTES);
 
     operand_b          = ex_i.uses_imm ? ex_i.imm : ex_i.op_b;
     branch_cmp_b       = ex_i.op_b;

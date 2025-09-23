@@ -7,9 +7,9 @@
 module `TB_MODULE_NAME;
   import amber48_pkg::*;
 
-  localparam string TEST_NAME          = `TB_NAME;
-  localparam integer EXPECTED_TRAP_VAL = `TB_EXPECTED_TRAP;
-  localparam integer MAX_CYCLES_VAL    = `TB_MAX_CYCLES;
+  localparam string          TEST_NAME        = `TB_NAME;
+  localparam amber48_trap_e  EXPECTED_TRAP_VAL= `TB_EXPECTED_TRAP;
+  localparam integer         MAX_CYCLES_VAL   = `TB_MAX_CYCLES;
 
   logic clk;
   logic rst_ni;
@@ -98,7 +98,10 @@ module `TB_MODULE_NAME;
       .led_o          (led_bus),
       .uart_tx_valid_o(uart_tx_valid),
       .uart_tx_data_o (uart_tx_data),
-      .uart_tx_ready_i(uart_tx_ready)
+      .uart_tx_ready_i(uart_tx_ready),
+      .aux_en_i       (1'b0),
+      .aux_addr_i     ('0),
+      .aux_rdata_o    ()
   );
 
   amber48_uart_tx #(
@@ -157,7 +160,7 @@ module `TB_MODULE_NAME;
     end else if (trap && !trap_seen) begin
       trap_seen <= 1'b1;
       actual_trap    = amber48_trap_e'(trap_cause);
-      expected_trap_e = amber48_trap_e'(EXPECTED_TRAP_VAL);
+      expected_trap_e = EXPECTED_TRAP_VAL;
       if (actual_trap !== expected_trap_e) begin
         $fatal(1, "[%0t][%s] Unexpected trap cause %s (expected %s)",
                $time, TEST_NAME, trap_to_string(actual_trap), trap_to_string(expected_trap_e));

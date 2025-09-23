@@ -25,8 +25,9 @@ module amber48_dmem
   localparam int unsigned ADDR_LSB     = $clog2(BAU_BYTES);
   localparam int unsigned INDEX_WIDTH  = $clog2(DEPTH);
   localparam int unsigned HIGH_MSB     = ADDR_LSB + INDEX_WIDTH;
-  localparam int unsigned MMIO_LED_IDX = DEPTH > 0 ? DEPTH-1 : 0;
-  localparam int unsigned MMIO_UART_IDX= DEPTH > 1 ? DEPTH-2 : MMIO_LED_IDX;
+  localparam logic [INDEX_WIDTH-1:0] MMIO_LED_IDX  = INDEX_WIDTH'((DEPTH > 0) ? (DEPTH-1) : 0);
+  localparam logic [INDEX_WIDTH-1:0] MMIO_UART_IDX = INDEX_WIDTH'((DEPTH > 1) ? (DEPTH-2)
+                                                              : ((DEPTH > 0) ? (DEPTH-1) : 0));
 
   logic [XLEN-1:0]              ram [0:DEPTH-1];
   logic [INDEX_WIDTH-1:0]       addr_index;
@@ -118,6 +119,7 @@ module amber48_dmem
 
       led_o <= led_q;
     end
+  end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
