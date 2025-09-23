@@ -194,5 +194,3 @@ module amber48_decoder
 
 endmodule
 
-
-

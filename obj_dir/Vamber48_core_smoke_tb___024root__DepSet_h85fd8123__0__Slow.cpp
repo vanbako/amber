@@ -96,6 +96,12 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
     amber48_core_smoke_tb__DOT__u_core__DOT__rf_rs2 = 0;
     CData/*0:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall;
     amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall = 0;
+    CData/*0:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__flush_branch;
+    amber48_core_smoke_tb__DOT__u_core__DOT__flush_branch = 0;
+    CData/*0:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__flush_trap;
+    amber48_core_smoke_tb__DOT__u_core__DOT__flush_trap = 0;
+    VlWide<4>/*126:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff;
+    VL_ZERO_W(127, amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff);
     CData/*7:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__opcode;
     amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__opcode = 0;
     CData/*3:0*/ amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__rd_field;
@@ -122,6 +128,12 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
     amber48_core_smoke_tb__DOT__u_core__DOT__u_alu__DOT__trap_active = 0;
     VlWide<4>/*127:0*/ __Vtemp_5;
     // Body
+    amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall 
+        = ((((~ (IData)(vlSelf->amber48_core_smoke_tb__DOT__dmem_ready)) 
+             & (~ (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[0U] 
+                   >> 3U))) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[8U] 
+                               >> 7U)) & (0U != (0x30U 
+                                                 & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[0U])));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[0U] = 0U;
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[1U] = 0U;
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[2U] = 0U;
@@ -669,12 +681,6 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
                                          >> 0x20U)) 
                                 << 0xbU)));
     }
-    amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall 
-        = ((((~ (IData)(vlSelf->amber48_core_smoke_tb__DOT__dmem_ready)) 
-             & (~ (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[0U] 
-                   >> 3U))) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[8U] 
-                               >> 7U)) & (0U != (0x30U 
-                                                 & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[0U])));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_alu__DOT__ex_r[0U] = 0U;
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_alu__DOT__ex_r[1U] = 0U;
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_alu__DOT__ex_r[2U] = 0U;
@@ -1396,80 +1402,6 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
               >> 3U)) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
                          >> 0x1cU)) & (0U != (0x600000U 
                                               & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U])));
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_next 
-        = (0xffffffffffffULL & (8ULL + vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q));
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[0U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[1U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[2U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[3U];
-    if (((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U] 
-          >> 0x14U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
-                       >> 0x1cU))) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_next 
-            = (0xffffffffffffULL & (((QData)((IData)(
-                                                     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U])) 
-                                     << 0x1cU) | ((QData)((IData)(
-                                                                  vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[0U])) 
-                                                  >> 4U)));
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] = 0U;
-    }
-    if (((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[0U] 
-          >> 3U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
-                    >> 0x1cU))) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] = 0U;
-    }
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[0U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[1U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[2U];
-    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] 
-        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[3U];
-    if (vlSelf->amber48_core_smoke_tb__DOT__imem_valid) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] 
-            = (IData)(vlSelf->amber48_core_smoke_tb__DOT__u_imem__DOT__data_q);
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] 
-            = (((IData)(vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q) 
-                << 0x10U) | (IData)((vlSelf->amber48_core_smoke_tb__DOT__u_imem__DOT__data_q 
-                                     >> 0x20U)));
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] 
-            = (((IData)(vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q) 
-                >> 0x10U) | ((IData)((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q 
-                                      >> 0x20U)) << 0x10U));
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 1U;
-    } else if ((1U & (~ (IData)(amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall)))) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
-    }
-    if (((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U] 
-          >> 0x14U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
-                       >> 0x1cU))) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
-    }
-    if (((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[0U] 
-          >> 3U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
-                    >> 0x1cU))) {
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
-    }
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__rf_req 
         = (((QData)((IData)((0x100U | (0xffU & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
                                                 >> 6U))))) 
@@ -1508,6 +1440,65 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
             : vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_regfile__DOT__regs
            [(0xfU & (IData)((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__rf_req 
                              >> 0x35U)))]);
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_next 
+        = (0xffffffffffffULL & (8ULL + vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q));
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[0U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[1U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[2U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[3U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[0U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[1U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[2U];
+    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__u_decoder__DOT__decode_r[3U];
+    amber48_core_smoke_tb__DOT__u_core__DOT__flush_branch 
+        = ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U] 
+            >> 0x14U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
+                         >> 0x1cU));
+    amber48_core_smoke_tb__DOT__u_core__DOT__flush_trap 
+        = ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[0U] 
+            >> 3U) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[4U] 
+                      >> 0x1cU));
+    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U];
+    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U];
+    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U];
+    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U] 
+        = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U];
+    if (((IData)(amber48_core_smoke_tb__DOT__u_core__DOT__flush_branch) 
+         | (IData)(amber48_core_smoke_tb__DOT__u_core__DOT__flush_trap))) {
+        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U] = 0U;
+        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] = 0U;
+        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] = 0U;
+        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U] = 0U;
+    }
+    if (vlSelf->amber48_core_smoke_tb__DOT__imem_valid) {
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] 
+            = (IData)(vlSelf->amber48_core_smoke_tb__DOT__u_imem__DOT__data_q);
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] 
+            = (((IData)(vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q) 
+                << 0x10U) | (IData)((vlSelf->amber48_core_smoke_tb__DOT__u_imem__DOT__data_q 
+                                     >> 0x20U)));
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] 
+            = (((IData)(vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q) 
+                >> 0x10U) | ((IData)((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q 
+                                      >> 0x20U)) << 0x10U));
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 1U;
+    } else if ((1U & (~ (IData)(amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall)))) {
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
+    }
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U] 
         = Vamber48_core_smoke_tb__ConstPool__CONST_h2a0d1dfa_0[0U];
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[1U] 
@@ -1584,58 +1575,58 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
                                        << 7U))) | ((IData)(
                                                            (0x1ffffffffffffULL 
                                                             & (((QData)((IData)(
-                                                                                vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U])) 
+                                                                                amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U])) 
                                                                 << 0x12U) 
                                                                | ((QData)((IData)(
-                                                                                vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U])) 
+                                                                                amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U])) 
                                                                   >> 0xeU)))) 
                                                    << 0x17U));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[7U] 
         = (((IData)((0x1ffffffffffffULL & (((QData)((IData)(
-                                                            vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U])) 
+                                                            amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U])) 
                                             << 0x12U) 
                                            | ((QData)((IData)(
-                                                              vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U])) 
+                                                              amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U])) 
                                               >> 0xeU)))) 
             >> 9U) | ((IData)(((0x1ffffffffffffULL 
                                 & (((QData)((IData)(
-                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U])) 
+                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U])) 
                                     << 0x12U) | ((QData)((IData)(
-                                                                 vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U])) 
+                                                                 amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U])) 
                                                  >> 0xeU))) 
                                >> 0x20U)) << 0x17U));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[8U] 
         = (0xffU & ((IData)(((0x1ffffffffffffULL & 
-                              (((QData)((IData)(vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U])) 
+                              (((QData)((IData)(amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U])) 
                                 << 0x12U) | ((QData)((IData)(
-                                                             vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U])) 
+                                                             amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U])) 
                                              >> 0xeU))) 
                              >> 0x20U)) >> 9U));
     __Vtemp_5[2U] = (((IData)(((0xffffffffffffff80ULL 
                                 & (((QData)((IData)(
-                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                     << 0x21U) | (0xffffffffffffff80ULL 
                                                  & ((QData)((IData)(
-                                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                     << 1U)))) 
                                | (QData)((IData)((0x7fU 
-                                                  & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                  & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                       << 1U) 
-                                                     | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                     | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                         >> 0x1fU))))))) 
                       >> 0x10U) | ((IData)((((0xffffffffffffff80ULL 
                                               & (((QData)((IData)(
-                                                                  vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                                  amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                                   << 0x21U) 
                                                  | (0xffffffffffffff80ULL 
                                                     & ((QData)((IData)(
-                                                                       vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                       amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                        << 1U)))) 
                                              | (QData)((IData)(
                                                                (0x7fU 
-                                                                & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                                & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                                     << 1U) 
-                                                                   | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                                   | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                                       >> 0x1fU)))))) 
                                             >> 0x20U)) 
                                    << 0x10U));
@@ -1647,17 +1638,17 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
         = (((IData)(amber48_core_smoke_tb__DOT__u_core__DOT__rf_rs2) 
             >> 0x19U) | (((IData)(((0xffffffffffffff80ULL 
                                     & (((QData)((IData)(
-                                                        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                         << 0x21U) | 
                                        (0xffffffffffffff80ULL 
                                         & ((QData)((IData)(
-                                                           vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                           amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                            << 1U)))) 
                                    | (QData)((IData)(
                                                      (0x7fU 
-                                                      & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                      & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                           << 1U) 
-                                                         | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                         | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                             >> 0x1fU))))))) 
                           << 0x17U) | ((IData)((amber48_core_smoke_tb__DOT__u_core__DOT__rf_rs2 
                                                 >> 0x20U)) 
@@ -1665,15 +1656,15 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[2U] 
         = (((0x7fU & ((IData)(((0xffffffffffffff80ULL 
                                 & (((QData)((IData)(
-                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                     << 0x21U) | (0xffffffffffffff80ULL 
                                                  & ((QData)((IData)(
-                                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                     << 1U)))) 
                                | (QData)((IData)((0x7fU 
-                                                  & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                  & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                       << 1U) 
-                                                     | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                     | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                         >> 0x1fU))))))) 
                       >> 9U)) | ((IData)((amber48_core_smoke_tb__DOT__u_core__DOT__rf_rs2 
                                           >> 0x20U)) 
@@ -1685,87 +1676,105 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
                                           & ((IData)(
                                                      (((0xffffffffffffff80ULL 
                                                         & (((QData)((IData)(
-                                                                            vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                                            amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                                             << 0x21U) 
                                                            | (0xffffffffffffff80ULL 
                                                               & ((QData)((IData)(
-                                                                                vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                                amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                                  << 1U)))) 
                                                        | (QData)((IData)(
                                                                          (0x7fU 
-                                                                          & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                                          & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                                               << 1U) 
-                                                                             | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                                             | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                                                 >> 0x1fU)))))) 
                                                       >> 0x20U)) 
                                              >> 9U))));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U] 
         = ((0xffffffbfU & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U]) 
-           | (0xffffffc0U & ((((~ (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U] 
-                                   >> 3U)) & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U] 
+           | (0xffffffc0U & ((((~ (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U] 
+                                   >> 3U)) & (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[3U] 
                                               >> 0x1eU)) 
                               << 6U) & ((((IData)((0U 
                                                    == 
                                                    (0x3d0U 
-                                                    & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U]))) 
+                                                    & amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U]))) 
                                           & (0U != 
                                              (0xfU 
-                                              & ((vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                              & ((amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                   << 1U) 
-                                                 | (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U] 
+                                                 | (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U] 
                                                     >> 0x1fU))))) 
                                          << 6U) | (0xffffffc0U 
-                                                   & (vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U] 
+                                                   & (amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[2U] 
                                                       << 2U))))));
     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U] 
         = ((0xffffffc0U & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U]) 
-           | (0x3fU & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U]));
-    if ((0x400U & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) {
+           | (0x3fU & amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U]));
+    if ((0x400U & amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) {
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[3U] 
             = ((0x7fffffU & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[3U]) 
                | ((IData)((0xffffffffffffULL & (((QData)((IData)(
-                                                                 vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                                 amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                                  << 0x15U) 
                                                 | ((QData)((IData)(
-                                                                   vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                   amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                    >> 0xbU)))) 
                   << 0x17U));
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[4U] 
             = (((IData)((0xffffffffffffULL & (((QData)((IData)(
-                                                               vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                               amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                                << 0x15U) 
                                               | ((QData)((IData)(
-                                                                 vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                 amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                  >> 0xbU)))) 
                 >> 9U) | ((IData)(((0xffffffffffffULL 
                                     & (((QData)((IData)(
-                                                        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                         << 0x15U) | 
                                        ((QData)((IData)(
-                                                        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                        amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                         >> 0xbU))) 
                                    >> 0x20U)) << 0x17U));
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[5U] 
             = ((0xffffff80U & vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[5U]) 
                | ((IData)(((0xffffffffffffULL & (((QData)((IData)(
-                                                                  vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U])) 
+                                                                  amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[1U])) 
                                                   << 0x15U) 
                                                  | ((QData)((IData)(
-                                                                    vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U])) 
+                                                                    amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_eff[0U])) 
                                                     >> 0xbU))) 
                            >> 0x20U)) >> 9U));
+    }
+    if (amber48_core_smoke_tb__DOT__u_core__DOT__flush_branch) {
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_next 
+            = (0xffffffffffffULL & (((QData)((IData)(
+                                                     vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[1U])) 
+                                     << 0x1cU) | ((QData)((IData)(
+                                                                  vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_result[0U])) 
+                                                  >> 4U)));
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] = 0U;
+    }
+    if (amber48_core_smoke_tb__DOT__u_core__DOT__flush_trap) {
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[2U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] = 0U;
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] = 0U;
     }
     if (amber48_core_smoke_tb__DOT__u_core__DOT__pipeline_stall) {
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_next 
             = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__pc_q;
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] 
-            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U];
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] 
-            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U];
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] 
-            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U];
-        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] 
-            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U];
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[0U] 
             = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[0U];
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[1U] 
@@ -1774,6 +1783,14 @@ VL_ATTR_COLD void Vamber48_core_smoke_tb___024root___stl_sequent__TOP__0(Vamber4
             = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[2U];
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_next[3U] 
             = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__if_stage_q[3U];
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[0U] 
+            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[0U];
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[1U] 
+            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[1U];
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[2U] 
+            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[2U];
+        vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_next[3U] 
+            = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__id_stage_q[3U];
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[0U] 
             = vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_q[0U];
         vlSelf->amber48_core_smoke_tb__DOT__u_core__DOT__ex_stage_next[1U] 

@@ -203,6 +203,33 @@ module `TB_MODULE_NAME;
   end
 `endif
 
+`ifdef DEBUG_CALL
+  always @(posedge clk) begin
+    if (rst_ni && (TEST_NAME == "call")) begin
+      if (u_core.writeback_en && (u_core.ex_stage_result.rd == amber48_pkg::REG_LR)) begin
+        $display("[CALL][%0t] LR writeback=%0h", $time, u_core.writeback_data);
+      end
+      if (u_core.writeback_en) begin
+        $display("[CALL][WB][%0t] rd=%0d data=%0h", $time, u_core.ex_stage_result.rd, u_core.writeback_data);
+      end
+      if (u_core.ex_stage_q.is_return) begin
+        $display("[CALL][%0t] return pc=%0h op_a=%0h", $time, u_core.ex_stage_q.pc, u_core.ex_stage_q.op_a);
+      end
+      if (u_core.ex_stage_q.is_jump_sub) begin
+        $display("[CALL][%0t] jump_sub pc=%0h target=%0h", $time, u_core.ex_stage_q.pc, u_core.ex_stage_result.branch_target);
+      end
+      if (dmem_req && dmem_we && dmem_ready) begin
+        $display("[CALL][%0t] DMEM store addr=%0h data=%0h", $time, dmem_addr, dmem_wdata);
+      end
+      if (u_core.id_stage_q.valid) begin
+        $display("[CALL][ID][%0t] pc=%0h jump_sub=%0b return=%0b imm=%0h", $time, u_core.id_stage_q.pc,
+                 u_core.id_stage_q.is_jump_sub, u_core.id_stage_q.is_return, u_core.id_stage_q.imm);
+      end
+      $display("[CALL][PC][%0t] pc_q=%0h", $time, u_core.pc_q);
+    end
+  end
+`endif
+
 endmodule
 
 `undef TB_MODULE_NAME

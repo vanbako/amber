@@ -1,0 +1,20 @@
+# Build and simulation outputs
+/build/
+/obj_dir/
+/wave/
+
+# Simulation result files generated alongside sources
+*.fst
+*.vcd
+*.vvp
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Editor and OS metadata
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db

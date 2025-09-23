@@ -44,6 +44,11 @@ module amber48_core
   logic                   store_commit;
   logic                   mem_request_pending;
   logic                   pipeline_stall;
+  logic                   flush_branch;
+  logic                   flush_trap;
+  logic                   flush_if_q;
+  logic                   flush_decode;
+  amber48_decode_out_s    id_stage_eff;
 
   amber48_decoder u_decoder (
       .fetch_i (if_stage_q),
@@ -110,6 +115,14 @@ module amber48_core
     id_stage_next = id_stage_from_decoder;
     ex_stage_next = ex_stage_q;
 
+    flush_branch = ex_stage_result.valid && ex_stage_result.branch_taken;
+    flush_trap   = ex_stage_result.valid && ex_stage_result.trap;
+    flush_decode = flush_branch || flush_trap || flush_if_q;
+    id_stage_eff = id_stage_q;
+    if (flush_decode) begin
+      id_stage_eff = '0;
+    end
+
     if (imem_valid_i) begin
       if_stage_next.valid = 1'b1;
       if_stage_next.pc    = pc_q;
@@ -119,42 +132,41 @@ module amber48_core
     end
 
     ex_stage_next              = '0;
-    ex_stage_next.valid        = id_stage_q.valid;
-    ex_stage_next.pc           = id_stage_q.pc;
+    ex_stage_next.valid        = id_stage_eff.valid;
+    ex_stage_next.pc           = id_stage_eff.pc;
     ex_stage_next.op_a         = rf_rs1;
     ex_stage_next.op_b         = rf_rs2;
-    ex_stage_next.imm          = id_stage_q.imm;
-    ex_stage_next.uses_imm     = id_stage_q.uses_imm;
-    ex_stage_next.alu_op       = id_stage_q.alu_op;
-    ex_stage_next.branch_type  = id_stage_q.branch_type;
-    ex_stage_next.is_jump      = id_stage_q.is_jump;
-    ex_stage_next.is_jump_sub  = id_stage_q.is_jump_sub;
-    ex_stage_next.is_return    = id_stage_q.is_return;
-    ex_stage_next.rd           = id_stage_q.rd;
+    ex_stage_next.imm          = id_stage_eff.imm;
+    ex_stage_next.uses_imm     = id_stage_eff.uses_imm;
+    ex_stage_next.alu_op       = id_stage_eff.alu_op;
+    ex_stage_next.branch_type  = id_stage_eff.branch_type;
+    ex_stage_next.is_jump      = id_stage_eff.is_jump;
+    ex_stage_next.is_jump_sub  = id_stage_eff.is_jump_sub;
+    ex_stage_next.is_return    = id_stage_eff.is_return;
+    ex_stage_next.rd           = id_stage_eff.rd;
     ex_stage_next.store_data   = rf_rs2;
-    ex_stage_next.writeback_en = id_stage_q.valid && !id_stage_q.trap &&
-                                 ((!id_stage_q.store &&
-                                   (id_stage_q.branch_type == BR_NONE) &&
-                                   (id_stage_q.rd != REG_ZERO)) ||
-                                  id_stage_q.is_jump_sub);
-    ex_stage_next.load         = id_stage_q.load;
-    ex_stage_next.store        = id_stage_q.store;
-    ex_stage_next.trap         = id_stage_q.trap;
-    ex_stage_next.trap_cause   = id_stage_q.trap_cause;
+    ex_stage_next.writeback_en = id_stage_eff.valid && !id_stage_eff.trap &&
+                                 ((!id_stage_eff.store &&
+                                   (id_stage_eff.branch_type == BR_NONE) &&
+                                   (id_stage_eff.rd != REG_ZERO)) ||
+                                  id_stage_eff.is_jump_sub);
+    ex_stage_next.load         = id_stage_eff.load;
+    ex_stage_next.store        = id_stage_eff.store;
+    ex_stage_next.trap         = id_stage_eff.trap;
+    ex_stage_next.trap_cause   = id_stage_eff.trap_cause;
 
-    if (id_stage_q.uses_imm) begin
-      ex_stage_next.op_b = id_stage_q.imm;
+    if (id_stage_eff.uses_imm) begin
+      ex_stage_next.op_b = id_stage_eff.imm;
     end
 
-    if (ex_stage_result.valid && ex_stage_result.branch_taken) begin
-      pc_next       = ex_stage_result.branch_target;
-      if_stage_next = '0;
-      id_stage_next = '0;
+    if (flush_branch) begin
+      pc_next = ex_stage_result.branch_target;
     end
 
-    if (ex_stage_result.valid && ex_stage_result.trap) begin
+    if (flush_decode) begin
       if_stage_next = '0;
       id_stage_next = '0;
+      ex_stage_next = '0;
     end
 
     if (pipeline_stall) begin
@@ -172,11 +184,13 @@ module amber48_core
       if_stage_q  <= '0;
       id_stage_q  <= '0;
       ex_stage_q  <= '0;
+      flush_if_q  <= 1'b0;
     end else if (clk_en_i) begin
       pc_q        <= pc_next;
       if_stage_q  <= if_stage_next;
       id_stage_q  <= id_stage_next;
       ex_stage_q  <= ex_stage_next;
+      flush_if_q  <= flush_branch || flush_trap;
     end
   end
 

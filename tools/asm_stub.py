@@ -203,6 +203,14 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
         imm = encode_imm16(parse_immediate(inst.args[2], inst.line_num), inst.line_num)
         return pack_instruction(opcode, imm, rs1, 0, rd)
 
+    if mnem == "sub_imm":
+        if len(inst.args) != 3:
+            raise AssemblerError(f"Line {inst.line_num}: sub_imm expects rd, rs1, imm")
+        rd = parse_register(inst.args[0], inst.line_num)
+        rs1 = parse_register(inst.args[1], inst.line_num)
+        imm = encode_imm16(parse_immediate(inst.args[2], inst.line_num), inst.line_num)
+        return pack_instruction(opcode, imm, rs1, 0, rd)
+
     if mnem == "add":
         if len(inst.args) != 3:
             raise AssemblerError(f"Line {inst.line_num}: add expects rd, rs1, rs2")
@@ -210,6 +218,30 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
         rs1 = parse_register(inst.args[1], inst.line_num)
         rs2 = parse_register(inst.args[2], inst.line_num)
         return pack_instruction(opcode, encode_imm16(0, inst.line_num), rs1, rs2, rd)
+
+    if mnem == "sub":
+        if len(inst.args) != 3:
+            raise AssemblerError(f"Line {inst.line_num}: sub expects rd, rs1, rs2")
+        rd = parse_register(inst.args[0], inst.line_num)
+        rs1 = parse_register(inst.args[1], inst.line_num)
+        rs2 = parse_register(inst.args[2], inst.line_num)
+        return pack_instruction(opcode, encode_imm16(0, inst.line_num), rs1, rs2, rd)
+
+    if mnem in {"and", "or", "xor", "lsl", "lsr"}:
+        if len(inst.args) != 3:
+            raise AssemblerError(f"Line {inst.line_num}: {mnem} expects rd, rs1, rs2")
+        rd = parse_register(inst.args[0], inst.line_num)
+        rs1 = parse_register(inst.args[1], inst.line_num)
+        rs2 = parse_register(inst.args[2], inst.line_num)
+        return pack_instruction(opcode, encode_imm16(0, inst.line_num), rs1, rs2, rd)
+
+    if mnem == "xor_imm":
+        if len(inst.args) != 3:
+            raise AssemblerError(f"Line {inst.line_num}: xor_imm expects rd, rs1, imm")
+        rd = parse_register(inst.args[0], inst.line_num)
+        rs1 = parse_register(inst.args[1], inst.line_num)
+        imm = encode_imm16(parse_immediate(inst.args[2], inst.line_num), inst.line_num)
+        return pack_instruction(opcode, imm, rs1, 0, rd)
 
     if mnem in {"branch_eq", "branch_ne", "branch_ltu", "branch_lts", "branch_gtu", "branch_gts"}:
         if len(inst.args) != 3:
@@ -220,6 +252,15 @@ def assemble_instruction(inst: Instruction, labels: dict[str, int]) -> int:
         offset = target_pc - inst.pc
         imm = encode_imm16(offset, inst.line_num)
         return pack_instruction(opcode, imm, rs1, rs2, 0)
+
+    if mnem in {"branch_zero", "branch_notzero"}:
+        if len(inst.args) != 2:
+            raise AssemblerError(f"Line {inst.line_num}: {mnem} expects rs1, label")
+        rs1 = parse_register(inst.args[0], inst.line_num)
+        target_pc = resolve_label(inst.args[1], labels, inst.line_num)
+        offset = target_pc - inst.pc
+        imm = encode_imm16(offset, inst.line_num)
+        return pack_instruction(opcode, imm, rs1, 0, 0)
 
     if mnem == "branch_always":
         if len(inst.args) != 1:
@@ -356,6 +397,5 @@ if __name__ == "__main__":
         main()
     except AssemblerError as err:
         raise SystemExit(str(err))
-
 
 
