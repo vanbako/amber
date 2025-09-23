@@ -11,6 +11,10 @@ module amber48_top
     output logic [7:0] uart_tx_data_o
 );
 
+  // Mark rxp as intentionally unused (future RX path), but keep it to satisfy
+  // pinout/constraints and silence synthesis warnings.
+  (* keep = "true", syn_keep = 1 *) logic rxp_keep;
+
   logic rst_sync_n;
   logic [XLEN-1:0] imem_addr;
   logic [XLEN-1:0] imem_data;
@@ -104,6 +108,9 @@ module amber48_top
 
   assign uart_tx_valid_o = uart_tx_valid;
   assign uart_tx_data_o  = uart_tx_data;
+
+  // Prevent 'rxp' unused warnings by giving it a kept fanout.
+  assign rxp_keep = rxp;
 
   // Simple heartbeat toggles each retired instruction.
   always_ff @(posedge sys_clk or negedge rst_sync_n) begin

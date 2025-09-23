@@ -74,4 +74,10 @@ foreach f ${rtl_files} {
 set pdc_file [file join ${proj_dir} "src/0.1/fpga/gowin_arorav/amber48_top.pdc"]
 add_file ${pdc_file}
 
+# Timing constraints (SDC): define the external 27 MHz sys_clk
+set sdc_file [file join ${proj_dir} "src/0.1/fpga/gowin_arorav/amber48_top.sdc"]
+if {[file exists ${sdc_file}]} {
+  add_file -type sdc ${sdc_file}
+}
+
 run all

@@ -29,7 +29,9 @@ module amber48_core
   amber48_decode_in_s     if_stage_next;
   amber48_decode_out_s    id_stage_q;
   amber48_decode_out_s    id_stage_next;
-  amber48_decode_out_s    id_stage_from_decoder;
+  // Keep decoder outputs from being swept when upstream optimization deems
+  // them unused (e.g., during empty ROM/inactive paths in early bring-up).
+  (* keep = "true", syn_keep = 1 *) amber48_decode_out_s    id_stage_from_decoder;
   amber48_execute_in_s    ex_stage_q;
   amber48_execute_in_s    ex_stage_next;
   amber48_execute_out_s   ex_stage_result_raw;
@@ -53,7 +55,8 @@ module amber48_core
   logic [XLEN-1:0]        rs2_value;
   logic [XLEN-1:0]        store_value;
 
-  amber48_decoder u_decoder (
+  // Preserve decoder instance during synthesis to avoid NL0002 sweep warnings
+  (* keep = "true", syn_keep = 1 *) amber48_decoder u_decoder (
       .fetch_i (if_stage_q),
       .decode_o(id_stage_from_decoder)
   );
