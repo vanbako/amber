@@ -49,6 +49,9 @@ module amber48_core
   logic                   flush_if_q;
   logic                   flush_decode;
   amber48_decode_out_s    id_stage_eff;
+  logic [XLEN-1:0]        rs1_value;
+  logic [XLEN-1:0]        rs2_value;
+  logic [XLEN-1:0]        store_value;
 
   amber48_decoder u_decoder (
       .fetch_i (if_stage_q),
@@ -125,17 +128,31 @@ module amber48_core
 
     if (imem_valid_i) begin
       if_stage_next.valid = 1'b1;
-      if_stage_next.pc    = pc_q;
+      if_stage_next.pc    = pc_q - PC_INCREMENT;
       if_stage_next.instr = imem_data_i;
     end else if (!pipeline_stall) begin
       if_stage_next       = '0;
     end
 
+    rs1_value   = rf_rs1;
+    rs2_value   = rf_rs2;
+    store_value = rf_rs2;
+    if (ex_stage_result.valid && ex_stage_result.writeback_en &&
+        (ex_stage_result.rd != REG_ZERO)) begin
+      if (ex_stage_result.rd == id_stage_eff.rs1) begin
+        rs1_value = writeback_data;
+      end
+      if (ex_stage_result.rd == id_stage_eff.rs2) begin
+        rs2_value   = writeback_data;
+        store_value = writeback_data;
+      end
+    end
+
     ex_stage_next              = '0;
     ex_stage_next.valid        = id_stage_eff.valid;
     ex_stage_next.pc           = id_stage_eff.pc;
-    ex_stage_next.op_a         = rf_rs1;
-    ex_stage_next.op_b         = rf_rs2;
+    ex_stage_next.op_a         = rs1_value;
+    ex_stage_next.op_b         = rs2_value;
     ex_stage_next.imm          = id_stage_eff.imm;
     ex_stage_next.uses_imm     = id_stage_eff.uses_imm;
     ex_stage_next.alu_op       = id_stage_eff.alu_op;
@@ -144,7 +161,7 @@ module amber48_core
     ex_stage_next.is_jump_sub  = id_stage_eff.is_jump_sub;
     ex_stage_next.is_return    = id_stage_eff.is_return;
     ex_stage_next.rd           = id_stage_eff.rd;
-    ex_stage_next.store_data   = rf_rs2;
+    ex_stage_next.store_data   = store_value;
     ex_stage_next.writeback_en = id_stage_eff.valid && !id_stage_eff.trap &&
                                  ((!id_stage_eff.store &&
                                    (id_stage_eff.branch_type == BR_NONE) &&

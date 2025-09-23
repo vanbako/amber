@@ -66,11 +66,17 @@ module amber48_decoder
 
     case (opcode)
       OPCODE_UPPER_IMM: begin
-        decode_r.alu_op   = ALU_PASS;
-        decode_r.uses_imm = 1'b1;
-        decode_r.rs1      = REG_ZERO;
-        decode_r.rs2      = REG_ZERO;
-        decode_r.imm      = upper_imm_value;
+        if (fetch_i.instr == '0) begin
+          decode_r.trap       = 1'b1;
+          decode_r.trap_cause = TRAP_ILLEGAL;
+          decode_r.rd         = '0;
+        end else begin
+          decode_r.alu_op   = ALU_PASS;
+          decode_r.uses_imm = 1'b1;
+          decode_r.rs1      = REG_ZERO;
+          decode_r.rs2      = REG_ZERO;
+          decode_r.imm      = upper_imm_value;
+        end
       end
       OPCODE_ADD_REG: begin
         decode_r.alu_op = ALU_ADD;
@@ -193,4 +199,3 @@ module amber48_decoder
   assign decode_o = decode_r;
 
 endmodule
-
