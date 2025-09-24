@@ -1,5 +1,5 @@
-module amber48_top
-  import amber48_pkg::*;
+module amber128_top
+  import amber128_pkg::*;
 (
     input  logic sys_clk,
     input  logic sys_rst_n,
@@ -11,13 +11,11 @@ module amber48_top
     output logic [7:0] uart_tx_data_o
 );
 
-  // Mark rxp as intentionally unused (future RX path), but register it and
-  // keep the flop so synthesis considers the port used and preserves pinout.
   (* keep = "true", syn_keep = 1 *) logic rxp_ff;
 
   logic rst_sync_n;
-  logic [XLEN-1:0] imem_addr;
-  logic [XLEN-1:0] imem_data;
+  logic [63:0]     imem_addr;
+  logic [C_XLEN-1:0] imem_data;
   logic            imem_valid;
 
   logic            trap;
@@ -26,9 +24,9 @@ module amber48_top
 
   logic            dmem_req;
   logic            dmem_we;
-  logic [XLEN-1:0] dmem_addr;
-  logic [XLEN-1:0] dmem_wdata;
-  logic [XLEN-1:0] dmem_rdata;
+  logic [63:0]     dmem_addr;
+  logic [C_XLEN-1:0] dmem_wdata;
+  logic [C_XLEN-1:0] dmem_rdata;
   logic            dmem_ready;
   logic            dmem_trap;
 
@@ -44,7 +42,7 @@ module amber48_top
       .rst_no(rst_sync_n)
   );
 
-  amber48_core u_core (
+  amber128_core u_core (
       .clk_i        (sys_clk),
       .rst_ni       (rst_sync_n),
       .clk_en_i     (1'b1),
@@ -63,8 +61,8 @@ module amber48_top
       .dmem_trap_i  (dmem_trap)
   );
 
-  amber48_imem #(
-      .INIT_FILE("build/amber48_smoke.hex")
+  amber128_imem #(
+      .INIT_FILE("build/amber128_smoke.hex")
   ) u_imem (
       .clk_i  (sys_clk),
       .rst_ni (rst_sync_n),
@@ -73,9 +71,7 @@ module amber48_top
       .valid_o(imem_valid)
   );
 
-  amber48_dmem #(
-      .INIT_FILE("")
-  ) u_dmem (
+  amber128_dmem u_dmem (
       .clk_i          (sys_clk),
       .rst_ni         (rst_sync_n),
       .req_i          (dmem_req),
@@ -88,10 +84,7 @@ module amber48_top
       .led_o          (led_bus),
       .uart_tx_valid_o(uart_tx_valid),
       .uart_tx_data_o (uart_tx_data),
-      .uart_tx_ready_i(uart_tx_ready),
-      .aux_en_i       (1'b0),
-      .aux_addr_i     ('0),
-      .aux_rdata_o    ()
+      .uart_tx_ready_i(uart_tx_ready)
   );
 
   amber48_uart_tx #(
@@ -109,7 +102,6 @@ module amber48_top
   assign uart_tx_valid_o = uart_tx_valid;
   assign uart_tx_data_o  = uart_tx_data;
 
-  // Capture rxp into a kept flop to avoid 'unused input' warnings.
   always_ff @(posedge sys_clk or negedge rst_sync_n) begin
     if (!rst_sync_n) begin
       rxp_ff <= 1'b0;
@@ -118,7 +110,6 @@ module amber48_top
     end
   end
 
-  // Simple heartbeat toggles each retired instruction.
   always_ff @(posedge sys_clk or negedge rst_sync_n) begin
     if (!rst_sync_n) begin
       heartbeat_q <= 1'b0;
@@ -127,7 +118,8 @@ module amber48_top
     end
   end
 
-  assign led0_o      = heartbeat_q;
-  assign led_mmio_o  = led_bus;
+  assign led0_o     = heartbeat_q;
+  assign led_mmio_o = led_bus;
 
 endmodule
+

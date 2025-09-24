@@ -12,6 +12,10 @@ module amber48_uart_tx #(
 
   localparam int unsigned CLKS_PER_BIT = (CLOCK_FREQ_HZ + (BAUD_RATE/2)) / BAUD_RATE;
   localparam int unsigned CLK_CNT_WIDTH = (CLKS_PER_BIT <= 1) ? 1 : $clog2(CLKS_PER_BIT);
+  // Pre-sized constants to avoid width truncation warnings in synthesis
+  localparam logic [CLK_CNT_WIDTH-1:0] CLKS_PER_BIT_VEC = CLKS_PER_BIT[CLK_CNT_WIDTH-1:0];
+  localparam logic [CLK_CNT_WIDTH-1:0] ONE_TICK         = {{(CLK_CNT_WIDTH-1){1'b0}}, 1'b1};
+  localparam logic [CLK_CNT_WIDTH-1:0] CLKS_PER_BIT_M1  = CLKS_PER_BIT_VEC - ONE_TICK;
 
   initial begin
     if (CLKS_PER_BIT < 1) begin
@@ -44,7 +48,7 @@ module amber48_uart_tx #(
       case (state_q)
         IDLE: begin
           tx_o      <= 1'b1;
-          clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
+          clk_cnt_q <= CLKS_PER_BIT_M1;
           bit_idx_q <= '0;
           if (valid_i) begin
             data_q    <= data_i;
@@ -56,11 +60,11 @@ module amber48_uart_tx #(
         START: begin
           if (clk_cnt_q == 0) begin
             state_q   <= DATA;
-            clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
+            clk_cnt_q <= CLKS_PER_BIT_M1;
             tx_o      <= data_q[0];
             bit_idx_q <= '0;
           end else begin
-            clk_cnt_q <= clk_cnt_q - 1;
+            clk_cnt_q <= clk_cnt_q - ONE_TICK;
             tx_o      <= 1'b0;
           end
         end
@@ -69,15 +73,15 @@ module amber48_uart_tx #(
           if (clk_cnt_q == 0) begin
             if (bit_idx_q == 3'd7) begin
               state_q   <= STOP;
-              clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
+              clk_cnt_q <= CLKS_PER_BIT_M1;
               tx_o      <= 1'b1;
             end else begin
-              bit_idx_q <= bit_idx_q + 1;
-              clk_cnt_q <= CLK_CNT_WIDTH'(CLKS_PER_BIT - 1);
-              tx_o      <= data_q[bit_idx_q + 1];
+              bit_idx_q <= bit_idx_q + 3'd1;
+              clk_cnt_q <= CLKS_PER_BIT_M1;
+              tx_o      <= data_q[bit_idx_q + 3'd1];
             end
           end else begin
-            clk_cnt_q <= clk_cnt_q - 1;
+            clk_cnt_q <= clk_cnt_q - ONE_TICK;
           end
         end
 
@@ -86,7 +90,7 @@ module amber48_uart_tx #(
             state_q <= IDLE;
             tx_o    <= 1'b1;
           end else begin
-            clk_cnt_q <= clk_cnt_q - 1;
+            clk_cnt_q <= clk_cnt_q - ONE_TICK;
             tx_o      <= 1'b1;
           end
         end
