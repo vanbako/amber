@@ -1,9 +1,14 @@
+`timescale 1ns/1ps
+
 module amber128_regfile
   import amber128_pkg::*;
 (
     input  logic                       clk_i,
     input  logic                       rst_ni,
     input  amber128_regfile_req_s      req_i,
+    input  logic                       wr_en_i,
+    input  logic [DATA_REG_AW-1:0]     wr_addr_i,
+    input  logic [D_XLEN-1:0]          wr_data_i,
     output logic [D_XLEN-1:0]          rd_a_o,
     output logic [D_XLEN-1:0]          rd_b_o
 );
@@ -17,8 +22,8 @@ module amber128_regfile
         regs[i] <= '0;
       end
     end else begin
-      if (req_i.valid && req_i.we && (req_i.rw != REG_ZERO)) begin
-        regs[req_i.rw] <= req_i.wd;
+      if (wr_en_i && (wr_addr_i != REG_ZERO)) begin
+        regs[wr_addr_i] <= wr_data_i;
       end
     end
   end

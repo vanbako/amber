@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 package amber128_pkg;
 
   // Data and capability widths
@@ -11,6 +13,8 @@ package amber128_pkg;
   localparam int unsigned DATA_REG_AW         = $clog2(DATA_REG_COUNT);
   localparam int unsigned CAP_REG_COUNT       = 8;    // c0..c7 (PC, SP, SSP, LR, etc.)
   localparam int unsigned CAP_REG_AW          = $clog2(CAP_REG_COUNT);
+
+  /* verilator lint_off UNUSEDPARAM */
   localparam int unsigned CSR_COUNT           = 128;  // 128x CSR, 64-bit each
   localparam int unsigned CSR_AW              = $clog2(CSR_COUNT);
 
@@ -21,6 +25,7 @@ package amber128_pkg;
   localparam logic [CAP_REG_AW-1:0] CREG_LR   = CAP_REG_AW'(3);
   localparam logic [CAP_REG_AW-1:0] CREG_DDC  = CAP_REG_AW'(4); // default data cap
   localparam logic [CAP_REG_AW-1:0] CREG_PSTATE = CAP_REG_AW'(7);
+  /* verilator lint_on UNUSEDPARAM */
 
   // Data register aliases
   localparam logic [DATA_REG_AW-1:0] REG_ZERO = '0;
@@ -111,12 +116,8 @@ package amber128_pkg;
 
   // Regfile access
   typedef struct packed {
-    logic                         valid;
     logic [DATA_REG_AW-1:0]      ra;
     logic [DATA_REG_AW-1:0]      rb;
-    logic [DATA_REG_AW-1:0]      rw;
-    logic                        we;
-    logic [D_XLEN-1:0]           wd;
   } amber128_regfile_req_s;
 
 endpackage : amber128_pkg

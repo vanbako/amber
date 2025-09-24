@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module amber128_dmem
   import amber128_pkg::*;
 #(
@@ -30,7 +32,7 @@ module amber128_dmem
   logic [7:0]                  led_q;
   logic [7:0]                  uart_q;
 
-  // Place MMIO registers at the top of the address space, similar to 0.1
+  // Place MMIO registers at the top of the address space, for compatibility with prior prototypes
   localparam logic [INDEX_WIDTH-1:0] MMIO_LED_IDX  = INDEX_WIDTH'((DEPTH > 0) ? (DEPTH-1) : 0);
   localparam logic [INDEX_WIDTH-1:0] MMIO_UART_IDX = INDEX_WIDTH'((DEPTH > 1) ? (DEPTH-2) : ((DEPTH>0)?(DEPTH-1):0));
   logic is_mmio_led, is_mmio_uart;

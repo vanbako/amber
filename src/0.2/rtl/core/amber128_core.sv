@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module amber128_core
   import amber128_pkg::*;
 (
@@ -31,15 +33,20 @@ module amber128_core
 
   // Fetch/decode/execute wires
   amber128_fetch_s       fetch_bus;
+  /* verilator lint_off UNUSEDSIGNAL */
   amber128_decode_s      decode_bus;
+  amber128_exec_out_s    ex_o;
+  /* verilator lint_on UNUSEDSIGNAL */
   logic                  slot_two12;
 
   amber128_regfile_req_s rf_req;
   logic [D_XLEN-1:0]     rf_rs;
   logic [D_XLEN-1:0]     rf_rd_curr;
+  logic                   rf_we_commit;
+  logic [D_XLEN-1:0]      rf_wd_commit;
+  logic [DATA_REG_AW-1:0] rf_wr_addr_commit;
 
   amber128_exec_in_s     ex_i;
-  amber128_exec_out_s    ex_o;
 
   // Capability access (PC, addressing cap, data cap)
   logic [C_XLEN-1:0]     cap_pc_rdata;
@@ -61,11 +68,14 @@ module amber128_core
 
   // Submodules
   amber128_regfile u_regfile (
-      .clk_i (clk_i),
-      .rst_ni(rst_ni),
-      .req_i (rf_req),
-      .rd_a_o(rf_rs),
-      .rd_b_o(rf_rd_curr)
+      .clk_i    (clk_i),
+      .rst_ni   (rst_ni),
+      .req_i    (rf_req),
+      .wr_en_i  (rf_we_commit),
+      .wr_addr_i(rf_wr_addr_commit),
+      .wr_data_i(rf_wd_commit),
+      .rd_a_o   (rf_rs),
+      .rd_b_o   (rf_rd_curr)
   );
 
   amber128_capfile u_capfile (
@@ -108,7 +118,6 @@ module amber128_core
   // Regfile request: rs read and rd current value read (for passthrough)
   always_comb begin
     rf_req          = '0;
-    rf_req.valid    = 1'b1;
     if (decode_bus.is_st128 || decode_bus.is_ld128) begin
       rf_req.ra     = REG_ZERO;
       rf_req.rb     = REG_ZERO;
@@ -116,9 +125,6 @@ module amber128_core
       rf_req.ra     = decode_bus.rd; // rd current value
       rf_req.rb     = decode_bus.rs; // rs value
     end
-    rf_req.rw       = decode_bus.rd;
-    rf_req.we       = 1'b0; // set on writeback
-    rf_req.wd       = '0;
   end
 
   // Build execute input
@@ -143,13 +149,14 @@ module amber128_core
   logic [63:0] eff_addr;
   logic        cap_ok_mem;
   logic        cap_ok_pc;
+  logic [63:0] pc_base;
+  logic [63:0] pc_bound;
   always_comb begin
     cap_base  = cap_addr_rdata[63:0];
     cap_bound = cap_addr_rdata[127:64];
     eff_addr  = cap_base + ( {40'b0, decode_bus.imm24} << 4 );
     cap_ok_mem= (eff_addr >= cap_base) && ((eff_addr + 16) <= cap_bound);
     // PC capability bounds check for current bundle address
-    logic [63:0] pc_base, pc_bound;
     pc_base   = cap_pc_rdata[63:0];
     pc_bound  = cap_pc_rdata[127:64];
     cap_ok_pc = (pc_word_addr_q >= pc_base) && ((pc_word_addr_q + 16) <= pc_bound);
@@ -182,6 +189,9 @@ module amber128_core
     cap_waddr         = '0;
     cap_wdata         = '0;
     init_caps_n       = init_caps_q;
+    rf_we_commit      = 1'b0;
+    rf_wd_commit      = '0;
+    rf_wr_addr_commit = '0;
 
     // Initialize PC CAR once after reset
     if (init_caps_q) begin
@@ -195,7 +205,7 @@ module amber128_core
     if (!bundle_valid_q && imem_valid_i) begin
       bundle_n       = imem_data_i;
       bundle_valid_n = 1'b1;
-      slot_idx_n     = 3'(0);
+      slot_idx_n     = 3'd0;
       sub12_n        = 1'b0;
     end
 
@@ -206,7 +216,7 @@ module amber128_core
         // Redirect fetch to branch target bundle address
         bundle_valid_n = 1'b0;
         pc_word_addr_n = ex_o.next_word_addr;
-        slot_idx_n     = 3'(0);
+        slot_idx_n     = 3'd0;
         sub12_n        = 1'b0;
         // Update PC capability base to new bundle address (bound unchanged)
         cap_we    = 1'b1;
@@ -239,8 +249,9 @@ module amber128_core
       end else begin
         // Non-mem: retire and prepare writeback
         if (decode_bus.rd != REG_ZERO) begin
-          rf_req.we  = 1'b1;
-          rf_req.wd  = ex_o.result;
+          rf_we_commit      = 1'b1;
+          rf_wd_commit      = ex_o.result;
+          rf_wr_addr_commit = decode_bus.rd;
         end
         retired_pulse = 1'b1;
       end
@@ -251,9 +262,9 @@ module amber128_core
         sub12_n = 1'b1;
       end else begin
         sub12_n = 1'b0;
-        if (slot_idx_q == 3'(4)) begin
+        if (slot_idx_q == 3'd4) begin
           bundle_valid_n = 1'b0;
-          pc_word_addr_n = pc_word_addr_q + IMEM_WORD_BYTES;
+          pc_word_addr_n = pc_word_addr_q + 64'(IMEM_WORD_BYTES);
           // Update PC capability base to new bundle address (bound unchanged)
           if (!(mem_inflight_q && dmem_ready_i)) begin
             cap_we    = 1'b1;
@@ -261,7 +272,7 @@ module amber128_core
             cap_wdata = {cap_pc_rdata[127:64], pc_word_addr_n};
           end
         end else begin
-          slot_idx_n = slot_idx_q + 3'(1);
+          slot_idx_n = slot_idx_q + 3'd1;
         end
       end
       end // not a branch
@@ -290,8 +301,8 @@ module amber128_core
   // Sequential state
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      pc_word_addr_q <= 64'(0);
-      slot_idx_q     <= 3'(0);
+      pc_word_addr_q <= 64'd0;
+      slot_idx_q     <= 3'd0;
       sub12_q        <= 1'b0;
       bundle_valid_q <= 1'b0;
       bundle_q       <= '0;

@@ -360,8 +360,8 @@ def main() -> None:
         "stub",
         type=Path,
         nargs="?",
-        default=Path("tests/add_loop.s"),
-        help="Path to the assembly stub (default: tests/add_loop.s)",
+        default=Path("tests/0.1/asm/add_loop.s"),
+        help="Path to the assembly stub (default: tests/0.1/asm/add_loop.s)",
     )
     parser.add_argument(
         "-o",

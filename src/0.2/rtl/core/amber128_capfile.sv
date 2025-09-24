@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module amber128_capfile
   import amber128_pkg::*;
 (

@@ -33,8 +33,8 @@ if {![file exists $rom_hex]} {
 }
 
 set rtl_files {
-  src/0.1/rtl/platform/reset_sync.sv
-  src/0.1/rtl/periph/amber48_uart_tx.sv
+  src/0.2/rtl/platform/amber128_reset_sync.sv
+  src/0.2/rtl/periph/amber128_uart_tx.sv
   src/0.2/rtl/common/amber128_pkg.sv
   src/0.2/rtl/core/amber128_regfile.sv
   src/0.2/rtl/core/amber128_capfile.sv
@@ -50,11 +50,11 @@ foreach f ${rtl_files} {
   add_file -type verilog $fp
 }
 
-# Reuse the same PDC and SDC as 0.1 for board pinout and clock
-set pdc_file [file join ${proj_dir} "src/0.1/fpga/gowin_arorav/amber48_top.pdc"]
+# Use the 0.2-local copies of the Gowin constraints for board pinout and clock reuse
+set pdc_file [file join ${proj_dir} "src/0.2/fpga/gowin_arorav/amber128_top.pdc"]
 add_file ${pdc_file}
 
-set sdc_file [file join ${proj_dir} "src/0.1/fpga/gowin_arorav/amber48_top.sdc"]
+set sdc_file [file join ${proj_dir} "src/0.2/fpga/gowin_arorav/amber128_top.sdc"]
 if {[file exists ${sdc_file}]} {
   add_file -type sdc ${sdc_file}
 }

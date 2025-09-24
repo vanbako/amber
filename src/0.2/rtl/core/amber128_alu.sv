@@ -1,3 +1,6 @@
+`timescale 1ns/1ps
+
+/* verilator lint_off UNUSEDSIGNAL */
 module amber128_alu
   import amber128_pkg::*;
 (
@@ -18,7 +21,7 @@ module amber128_alu
     ex_r.mem_addr      = '0;
     ex_r.mem_wdata     = '0;
     ex_r.branch_taken  = 1'b0;
-    ex_r.next_word_addr= ex_i.pc_word_addr + IMEM_WORD_BYTES;
+    ex_r.next_word_addr= ex_i.pc_word_addr + 64'(IMEM_WORD_BYTES);
     ex_r.trap          = 1'b0;
     ex_r.trap_cause    = TRAP_NONE;
 
@@ -40,7 +43,7 @@ module amber128_alu
     unique case (ex_i.branch)
       BR_NONE: begin
         ex_r.branch_taken   = 1'b0;
-        ex_r.next_word_addr = ex_i.pc_word_addr + IMEM_WORD_BYTES;
+        ex_r.next_word_addr = ex_i.pc_word_addr + 64'(IMEM_WORD_BYTES);
       end
       // For branches, treat imm24 as signed (imm13 sign-extended in decoder)
       BR_UNCOND: begin
@@ -57,7 +60,7 @@ module amber128_alu
       end
       default: begin
         ex_r.branch_taken   = 1'b0;
-        ex_r.next_word_addr = ex_i.pc_word_addr + IMEM_WORD_BYTES;
+        ex_r.next_word_addr = ex_i.pc_word_addr + 64'(IMEM_WORD_BYTES);
       end
     endcase
 
@@ -73,4 +76,5 @@ module amber128_alu
 
   assign ex_o = ex_r;
 
+/* verilator lint_on UNUSEDSIGNAL */
 endmodule

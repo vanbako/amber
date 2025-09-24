@@ -36,7 +36,7 @@ module amber128_top
   logic            uart_tx_valid;
   logic [7:0]      uart_tx_data;
 
-  reset_sync u_reset_sync (
+  amber128_reset_sync u_reset_sync (
       .clk_i (sys_clk),
       .rst_ni(sys_rst_n),
       .rst_no(rst_sync_n)
@@ -87,7 +87,7 @@ module amber128_top
       .uart_tx_ready_i(uart_tx_ready)
   );
 
-  amber48_uart_tx #(
+  amber128_uart_tx #(
       .CLOCK_FREQ_HZ(27_000_000),
       .BAUD_RATE    (115_200)
   ) u_uart_tx (
@@ -122,4 +122,3 @@ module amber128_top
   assign led_mmio_o = led_bus;
 
 endmodule
-

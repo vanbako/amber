@@ -26,14 +26,14 @@ SOURCES=(
 )
 
 STUBS=(
-  "tests/add_loop.s:build/amber48_smoke.hex"
-  "tests/branch_loop.s:build/amber48_branch.hex"
-  "tests/misaligned_store.s:build/amber48_misaligned.hex"
-  "tests/alu_ops.s:build/amber48_alu.hex"
-  "tests/branch_edge.s:build/amber48_branch_ext.hex"
-  "tests/call_return.s:build/amber48_call.hex"
-  "tests/misaligned_load.s:build/amber48_misaligned_load.hex"
-  "tests/dmem_oob.s:build/amber48_oob.hex"
+  "tests/0.1/asm/add_loop.s:build/amber48_smoke.hex"
+  "tests/0.1/asm/branch_loop.s:build/amber48_branch.hex"
+  "tests/0.1/asm/misaligned_store.s:build/amber48_misaligned.hex"
+  "tests/0.1/asm/alu_ops.s:build/amber48_alu.hex"
+  "tests/0.1/asm/branch_edge.s:build/amber48_branch_ext.hex"
+  "tests/0.1/asm/call_return.s:build/amber48_call.hex"
+  "tests/0.1/asm/misaligned_load.s:build/amber48_misaligned_load.hex"
+  "tests/0.1/asm/dmem_oob.s:build/amber48_oob.hex"
 )
 
 if [ "$#" -gt 0 ]; then

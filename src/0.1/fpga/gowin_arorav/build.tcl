@@ -26,7 +26,7 @@ set_option -verilog_std sysv2017
 # We invoke the repository's Python assembler to produce build/amber48_smoke.hex
 # in the current project directory ([pwd] changes to the project after creation).
 set asm_py   [file join ${proj_dir} tools asm_stub.py]
-set asm_stub [file join ${proj_dir} tests add_loop.s]
+set asm_stub [file join ${proj_dir} tests 0.1 asm add_loop.s]
 set rom_hex  [file join [pwd] build amber48_smoke.hex]
 if {[file exists $asm_py]} {
   file mkdir [file dirname $rom_hex]

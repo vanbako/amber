@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module amber128_imem
   import amber128_pkg::*;
 #(
@@ -27,6 +29,16 @@ module amber128_imem
         rom[i] = '0;
       end
     end
+  end
+
+  if (ADDR_LSB > 0) begin : gen_unused_addr_low
+    logic unused_addr_lo;
+    assign unused_addr_lo = |addr_i[ADDR_LSB-1:0];
+  end
+
+  if ((ADDR_LSB + INDEX_WIDTH) < 64) begin : gen_unused_addr_bits
+    logic unused_addr_hi;
+    assign unused_addr_hi = |addr_i[63:ADDR_LSB + INDEX_WIDTH];
   end
 
   assign index = addr_i[ADDR_LSB +: INDEX_WIDTH];

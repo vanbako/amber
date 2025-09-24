@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module amber128_decoder
   import amber128_pkg::*;
 (
@@ -11,20 +13,42 @@ module amber128_decoder
   amber128_decode_s d;
 
   // Slot mapping: flags are in [127:123], S0 payload [119:96], S1 [95:72], ... S4 [23:0]
-  logic [4:0] flags;
+  logic [4:0]  flags;
   logic [23:0] slot_payload;
   logic        slot_two12;
 
-  function automatic logic [23:0] get_slot_payload(input logic [C_XLEN-1:0] bundle, input logic [2:0] idx);
-    logic [6:0] hi, lo;
+  function automatic logic [23:0] get_slot_payload(
+      input logic [C_XLEN-1:0] bundle,
+      input logic [2:0]        idx
+  );
+    int hi;
     begin
-      hi = 7'(119 - 24*idx);
-      lo = hi - 23;
-      get_slot_payload = bundle[lo +: 24];
+      hi = 119 - (idx * 24);
+      get_slot_payload = bundle[hi -: 24];
     end
   endfunction
 
   always_comb begin
+    logic [3:0]  opc24;
+    logic [3:0]  rd4;
+    logic [2:0]  cap3;
+    logic [12:0] imm13;
+    logic [11:0] ins12;
+    logic [3:0]  opc12;
+    logic [2:0]  rd3;
+    logic [2:0]  rs3;
+    logic [1:0]  ins12_unused;
+
+    opc24 = '0;
+    rd4   = '0;
+    cap3  = '0;
+    imm13 = '0;
+    ins12 = '0;
+    opc12 = '0;
+    rd3   = '0;
+    rs3   = '0;
+    ins12_unused = '0;
+
     d                 = '0;
     d.valid           = fetch_i.valid;
     d.pc_word_addr    = fetch_i.word_addr;
@@ -35,28 +59,24 @@ module amber128_decoder
     d.cap_addr_sel    = CREG_DDC;
     d.cap_data_sel    = CREG_DDC;
 
-    flags       = fetch_i.bundle[127:123];
-    slot_two12  = flags[4 - slot_idx_i];
-    slot_payload= get_slot_payload(fetch_i.bundle, slot_idx_i);
+    flags        = fetch_i.bundle[127:123];
+    slot_two12   = flags[4 - slot_idx_i];
+    slot_payload = get_slot_payload(fetch_i.bundle, slot_idx_i);
     slot_has_two12_o = slot_two12;
 
     if (!slot_two12) begin
       // Single 24-bit instruction in this slot
       // [23:20]=opcode4, [19:16]=rd4, [15:13]=cap3, [12:0]=imm13 (in 16-byte units)
-      logic [3:0] opc24;
-      logic [3:0] rd4;
-      logic [2:0] cap3;
-      logic [12:0] imm13;
       opc24 = slot_payload[23:20];
       rd4   = slot_payload[19:16];
       cap3  = slot_payload[15:13];
       imm13 = slot_payload[12:0];
 
-      d.rd           = DATA_REG_AW'(rd4);
-      d.rs           = DATA_REG_AW'(rd4);
-      d.imm24        = 24'({11'b0, imm13});
-      d.cap_addr_sel = CAP_REG_AW'(cap3);
-      d.cap_data_sel = CAP_REG_AW'(rd4[2:0]);
+      d.rd           = rd4[DATA_REG_AW-1:0];
+      d.rs           = rd4[DATA_REG_AW-1:0];
+      d.imm24        = {11'b0, imm13};
+      d.cap_addr_sel = cap3[CAP_REG_AW-1:0];
+      d.cap_data_sel = rd4[CAP_REG_AW-1:0];
 
       unique case (opc24)
         4'h1: d.is_ld128 = 1'b1; // ld128 (rd, rd+1) <- [cap + imm<<3]
@@ -66,19 +86,19 @@ module amber128_decoder
           d.rd     = REG_ZERO; // no writeback
           d.rs     = REG_ZERO;
           // Sign-extend imm13 for branches
-          d.imm24  = 24'({{11{imm13[12]}}, imm13});
+          d.imm24  = {{11{imm13[12]}}, imm13};
         end
         4'h9: begin // beq rd4, rs3, +imm13
           d.branch = BR_EQ;
-          d.rd     = DATA_REG_AW'(rd4);
-          d.rs     = DATA_REG_AW'({1'b0, cap3});
-          d.imm24  = 24'({{11{imm13[12]}}, imm13});
+          d.rd     = rd4[DATA_REG_AW-1:0];
+          d.rs     = {1'b0, cap3}[DATA_REG_AW-1:0];
+          d.imm24  = {{11{imm13[12]}}, imm13};
         end
         4'hA: begin // bne rd4, rs3, +imm13
           d.branch = BR_NE;
-          d.rd     = DATA_REG_AW'(rd4);
-          d.rs     = DATA_REG_AW'({1'b0, cap3});
-          d.imm24  = 24'({{11{imm13[12]}}, imm13});
+          d.rd     = rd4[DATA_REG_AW-1:0];
+          d.rs     = {1'b0, cap3}[DATA_REG_AW-1:0];
+          d.imm24  = {{11{imm13[12]}}, imm13};
         end
         default: begin
           d.valid = fetch_i.valid; // will be treated as illegal upstream if needed
@@ -88,16 +108,14 @@ module amber128_decoder
     end else begin
       // Two 12-bit instructions packed in this slot
       // Order: [23:12]=first, [11:0]=second
-      logic [11:0] ins12;
       ins12 = sub12_i ? slot_payload[11:0] : slot_payload[23:12];
       // [11:8]=opcode4, [7:5]=rd3, [4:2]=rs3, [1:0] ignored (can be used later)
-      logic [3:0] opc12;
-      logic [2:0] rd3, rs3;
       opc12 = ins12[11:8];
       rd3   = ins12[7:5];
       rs3   = ins12[4:2];
-      d.rd  = DATA_REG_AW'({1'b0, rd3});
-      d.rs  = DATA_REG_AW'({1'b0, rs3});
+      ins12_unused = ins12[1:0];
+      d.rd  = {1'b0, rd3}[DATA_REG_AW-1:0];
+      d.rs  = {1'b0, rs3}[DATA_REG_AW-1:0];
 
       unique case (opc12)
         4'h0: begin // nop
