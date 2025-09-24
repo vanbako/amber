@@ -8,6 +8,8 @@ Minimal assembler for amber128 (0.2) 24-bit single-slot instructions packed into
 - bne rd, rs, imm             ; rs must be r0..r7
 - ld128 cD, [cA + imm]
 - st128 [cA + imm], cD
+- li rd, imm16
+- capmov cD, rN
 
 Program format:
 - One instruction per line; blank line starts a new bundle.
@@ -31,6 +33,8 @@ OPC_BEQ  = 0x9
 OPC_BNE  = 0xA
 OPC_LD   = 0x1
 OPC_ST   = 0x2
+OPC_LI   = 0x3
+OPC_CAPMOVE = 0x4
 
 
 @dataclass
@@ -86,7 +90,6 @@ def parse_creg(token: str, line: int) -> int:
 
 def parse_imm(token: str, line: int) -> int:
     t = token.strip()
-    neg = t.startswith('-')
     base = 10
     if t.startswith('0x') or t.startswith('-0x'):
         base = 16
@@ -96,8 +99,21 @@ def parse_imm(token: str, line: int) -> int:
         raise ValueError(f"Line {line}: invalid immediate '{token}'") from exc
     # Range check for 13-bit signed
     if val < -(1 << 12) or val >= (1 << 12):
-        # We allow up to +/- 4096 bundles which is plenty; enforce 13-bit signed
         raise ValueError(f"Line {line}: immediate {val} does not fit 13-bit signed")
+    return val
+
+
+def parse_imm16(token: str, line: int) -> int:
+    t = token.strip()
+    base = 10
+    if t.startswith('0x') or t.startswith('-0x'):
+        base = 16
+    try:
+        val = int(t, base)
+    except ValueError as exc:
+        raise ValueError(f"Line {line}: invalid 16-bit immediate '{token}'") from exc
+    if val < -(1 << 15) or val >= (1 << 15):
+        raise ValueError(f"Line {line}: immediate {val} does not fit 16-bit signed")
     return val
 
 
@@ -125,6 +141,23 @@ def encode_inst(inst: Inst, labels: Dict[str, int]) -> int:
         imm = parse_imm_or_label(args[2], labels, inst)
         opc = OPC_BEQ if k == 'beq' else OPC_BNE
         return enc_slot24(opc, rd, rs, imm)
+    if k == 'li':
+        if len(args) != 2:
+            raise ValueError(f"Line {inst.line}: li expects rd, imm16")
+        rd = parse_reg(args[0], inst.line)
+        imm = parse_imm16(args[1], inst.line)
+        value = imm & 0xFFFF
+        cap_bits = (value >> 13) & 0x7
+        imm_bits = value & 0x1FFF
+        return enc_slot24(OPC_LI, rd, cap_bits, imm_bits)
+    if k == 'capmov':
+        if len(args) != 2:
+            raise ValueError(f"Line {inst.line}: capmov expects cD, rN")
+        cd = parse_creg(args[0], inst.line)
+        rd = parse_reg(args[1], inst.line)
+        if rd >= 15:
+            raise ValueError(f"Line {inst.line}: capmov requires r0..r14 so rd+1 is valid")
+        return enc_slot24(OPC_CAPMOVE, rd, cd, 0)
     if k == 'ld128':
         if len(args) != 2:
             raise ValueError(f"Line {inst.line}: ld128 expects cD, [cA + imm]")

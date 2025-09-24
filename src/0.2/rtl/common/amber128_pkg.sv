@@ -78,6 +78,10 @@ package amber128_pkg;
     logic                        is_st128;
     logic [CAP_REG_AW-1:0]       cap_addr_sel;   // addressing capability (base/bounds)
     logic [CAP_REG_AW-1:0]       cap_data_sel;   // data capability for ld/st payload
+    logic                        cap_move;
+    logic [CAP_REG_AW-1:0]       cap_move_dst;
+    logic [DATA_REG_AW-1:0]      cap_move_src_lo;
+    logic [DATA_REG_AW-1:0]      cap_move_src_hi;
   } amber128_decode_s;
 
   // Execute input

@@ -38,6 +38,7 @@ module amber128_core
   amber128_exec_out_s    ex_o;
   /* verilator lint_on UNUSEDSIGNAL */
   logic                  slot_two12;
+  logic [D_XLEN-1:0]     imm64;
 
   amber128_regfile_req_s rf_req;
   logic [D_XLEN-1:0]     rf_rs;
@@ -118,17 +119,21 @@ module amber128_core
   // Regfile request: rs read and rd current value read (for passthrough)
   always_comb begin
     rf_req          = '0;
-    if (decode_bus.is_st128 || decode_bus.is_ld128) begin
+    if (decode_bus.cap_move) begin
+      rf_req.ra     = decode_bus.cap_move_src_hi;
+      rf_req.rb     = decode_bus.cap_move_src_lo;
+    end else if (decode_bus.is_st128 || decode_bus.is_ld128) begin
       rf_req.ra     = REG_ZERO;
       rf_req.rb     = REG_ZERO;
     end else begin
       rf_req.ra     = decode_bus.rd; // rd current value
-      rf_req.rb     = decode_bus.rs; // rs value
+      rf_req.rb     = decode_bus.is_imm ? REG_ZERO : decode_bus.rs; // rs value or literal
     end
   end
 
   // Build execute input
   always_comb begin
+    imm64               = {{(D_XLEN-24){decode_bus.imm24[23]}}, decode_bus.imm24};
     ex_i                = '0;
     ex_i.valid          = decode_bus.valid && !pipeline_stall && !trap_q;
     ex_i.pc_word_addr   = decode_bus.pc_word_addr;
@@ -140,7 +145,7 @@ module amber128_core
     ex_i.is_ld128       = decode_bus.is_ld128;
     ex_i.is_st128       = decode_bus.is_st128;
     ex_i.op_a           = rf_rd_curr;
-    ex_i.op_b           = rf_rs;
+    ex_i.op_b           = decode_bus.is_imm ? imm64 : rf_rs;
   end
 
   // Compute memory micro-ops and address using addressing capability base + (imm << 4)
@@ -224,8 +229,13 @@ module amber128_core
         cap_wdata = {cap_pc_rdata[127:64], pc_word_addr_n};
         retired_pulse = 1'b1;
       end else begin
-      // Memory operations issue request
-      if (decode_bus.is_st128) begin
+      // Memory operations and capability transfers
+      if (decode_bus.cap_move) begin
+        cap_we    = 1'b1;
+        cap_waddr = decode_bus.cap_move_dst;
+        cap_wdata = {rf_rs, rf_rd_curr};
+        retired_pulse = 1'b1;
+      end else if (decode_bus.is_st128) begin
         // Source pair: rd and rd+1 -> 128b
         if (!cap_ok_mem) begin
           trap_n       = 1'b1;
@@ -267,9 +277,11 @@ module amber128_core
           pc_word_addr_n = pc_word_addr_q + 64'(IMEM_WORD_BYTES);
           // Update PC capability base to new bundle address (bound unchanged)
           if (!(mem_inflight_q && dmem_ready_i)) begin
-            cap_we    = 1'b1;
-            cap_waddr = CREG_PC;
-            cap_wdata = {cap_pc_rdata[127:64], pc_word_addr_n};
+            if (!cap_we) begin
+              cap_we    = 1'b1;
+              cap_waddr = CREG_PC;
+              cap_wdata = {cap_pc_rdata[127:64], pc_word_addr_n};
+            end
           end
         end else begin
           slot_idx_n = slot_idx_q + 3'd1;

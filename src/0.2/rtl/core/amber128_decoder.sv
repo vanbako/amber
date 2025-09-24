@@ -33,6 +33,8 @@ module amber128_decoder
     logic [3:0]  rd4;
     logic [2:0]  cap3;
     logic [12:0] imm13;
+    logic [15:0] imm16;
+    logic [3:0]  rd4_next;
     logic [11:0] ins12;
     logic [3:0]  opc12;
     logic [2:0]  rd3;
@@ -43,6 +45,8 @@ module amber128_decoder
     rd4   = '0;
     cap3  = '0;
     imm13 = '0;
+    imm16 = '0;
+    rd4_next = '0;
     ins12 = '0;
     opc12 = '0;
     rd3   = '0;
@@ -79,8 +83,25 @@ module amber128_decoder
       d.cap_data_sel = rd4[CAP_REG_AW-1:0];
 
       unique case (opc24)
-        4'h1: d.is_ld128 = 1'b1; // ld128 (rd, rd+1) <- [cap + imm<<3]
-        4'h2: d.is_st128 = 1'b1; // st128 [cap + imm<<3] <- (rd, rd+1)
+        4'h1: d.is_ld128 = 1'b1; // ld128 (rd, rd+1) <- [cap + imm<<4]
+        4'h2: d.is_st128 = 1'b1; // st128 [cap + imm<<4] <- (rd, rd+1)
+        4'h3: begin // li rd, imm16
+          imm16 = {cap3, imm13};
+          d.rd     = rd4[DATA_REG_AW-1:0];
+          d.rs     = REG_ZERO;
+          d.is_imm = 1'b1;
+          d.alu_op = ALU_PASS;
+          d.imm24  = {{8{imm16[15]}}, imm16};
+        end
+        4'h4: begin // capmov cDst, rBase
+          rd4_next            = rd4 + 4'd1;
+          d.cap_move          = 1'b1;
+          d.cap_move_dst      = cap3[CAP_REG_AW-1:0];
+          d.cap_move_src_lo   = rd4[DATA_REG_AW-1:0];
+          d.cap_move_src_hi   = rd4_next[DATA_REG_AW-1:0];
+          d.rd                = REG_ZERO;
+          d.rs                = rd4[DATA_REG_AW-1:0];
+        end
         4'h8: begin // br (unconditional) to pc + (imm << 4)
           d.branch = BR_UNCOND;
           d.rd     = REG_ZERO; // no writeback
