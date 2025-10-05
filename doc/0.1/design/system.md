@@ -54,19 +54,22 @@
 
 ---
 
-## Caches (16x16 BAU each)
+## Caches and Coherence
 
-* **I\$:** 16 lines x 16 BAU/line (**256 BAU** total). Direct-mapped MVP.
-  Fetch delivers BAU-aligned windows to **XT**; `cPCC` bounds and X-perm checked.
-* **D\$:** 16 lines x 16 BAU/line (**256 BAU** total). Direct-mapped MVP, write-through (write-back later).
-  Capability and MMU perms enforced at **MF**.
+* **I$:** 32 KB, 4-way, 16-byte sectors. Fetch delivers BAU-aligned bundles to **XT**; execute permissions are checked against the capability tag cached with each line.
+* **D$:** 32 KB, 4-way, write-back with 16-byte sectors. Capability and MMU permissions are enforced at **MF**; stores stage capability metadata so writebacks carry the correct R/W/X/TRACE/LOAN summary into the fabric.
+* **Amber Coherence Fabric (ACF):**
+  - Core request channel emits `ReqRd` for shared fills and `ReqRdx` for exclusive ownership. Upgrades are triggered when a short-form window or capability store needs write permission.
+  - The 256 KB shared slice acts as the home agent. Each directory entry tracks a four-bit sharer vector plus the capability permission summary, and returns `RespData` with the current metadata.
+  - The snoop channel issues `SnpInv` when a line must be invalidated and `SnpClean` when the home agent needs a clean copy. Capability permission tightenings or LOAN expirations are treated as snoop events so L1s reconcile metadata before data is observed.
+  - External masters attach through the same ACF request/response/snoop message set. Transactions flagged non-coherent use the `NC` request type; they bypass the slice and rely on software fences (`capability_fence prefix`, `DMACTL.sync_dma`).
+* **Prefix fencing:** `capability_fence prefix` drains outstanding prefix windows and ensures D$ state transitions before capabilities are handed to other cores or devices.
 
 ### DMA visibility & coherence
 
-* enid inbound writes land in memory behind the D$ write-through path; the fabric is **not** hardware-coherent. Drivers must invalidate cache lines covering DMA destinations before handing buffers to devices.
-* Outbound DMA reads observe the most recent committed D$ state because write-through pushes data to memory immediately; for explicit dirty data, software toggles the `DMACTL.sync_dma` fence before ringing an enid doorbell.
-* Firmware can optionally grant read-only snoop permissions to accelerators that advertise coherency; otherwise, capabilities for shared buffers must be marked non-cacheable.
-* The `DMACTL.sync_dma` bit also lets software force completion of all posted enid writes before sampling device status or recycling descriptors.
+* enid inbound writes that do not participate in coherence use the ACF `NC` path and land behind the D$ write-back buffers; software must invalidate affected lines before handing buffers to devices.
+* Outbound DMA reads that see dirty cache lines rely on write-back completion; firmware toggles `DMACTL.sync_dma` to guarantee posted writes reach memory before ringing doorbells.
+* Coherent accelerators must speak the ACF protocol and honour the capability metadata delivered with each `RespData`. Non-coherent clients receive capabilities marked non-cacheable so they never bypass the required fences.
 
 ---
 
