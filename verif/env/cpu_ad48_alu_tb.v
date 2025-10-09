@@ -18,7 +18,7 @@ module cpu_ad48_alu_tb;
     .resetn(resetn)
   );
 
-  `include "../../../src/0.1/rtl/cpu_ad48_instr.vh"
+  `include "../../src/rtl/cpu_ad48_instr.vh"
 
   initial begin
     clk = 1'b0;
