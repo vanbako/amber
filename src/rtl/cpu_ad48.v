@@ -1,89 +1,51 @@
 `timescale 1ns/1ps
 
 // ============================================================================
-//  A/D bank minimal 48-bit CPU (single-cycle)
-//  - A bank (8 regs): A0 hard-wired 0; typically used for addresses/bases
-//  - D bank (8 regs): general data regs; LD writes into D, ST reads from D
-//  - Word-addressed (48-bit words). PC counts words.
-//  - Harvard IMEM/DMEM (synchronous). One instruction = one cycle (except HALT hold).
+//  cpu_ad48: single-cycle 48-bit Harvard core with split address/data banks.
+//  - A bank (8 regs): A0 hard-wired to zero; typically holds base pointers. Post-inc never updates A0.
+//  - D bank (8 regs): general-purpose data. Loads always write to D, stores read from D.
+//  - Word-addressed (48-bit words). PC counts words. IMEM/DMEM realised with simple_mem48.
+//  - Synchronous memories; every instruction completes in one cycle unless SYS.HALT holds the PC.
+//  - Load/store support optional post-increment of the A base register.
+//  - CSR block tracks privilege (user/supervisor/machine) and implements STATUS, SCRATCH, EPC, CAUSE, CYCLE, INSTRET.
+//  - CSR operations source their write data from D, return the selected value to either bank, and enforce privilege checks.
 //
-// Instruction formats (all 48-bit, fields MSB..LSB):
-// 1) ALU (A×D -> rd):
-//    [47:44]=OP_ALU (opcode class)
-//    [43:40]=funct (lower nibble of opcode)
-//    [39]   = rdBank (0=A, 1=D)
-//    [38:36]= rdIdx
-//    [35:33]= rsA
-//    [32:30]= rsD
-//    [29]   = swap (for commutatives; when 1, inputs seen as D,A)
-//    [28:24]= reserved (0 for now)
-//    [23:0] = 0
-//
-// 2) ALU-IMM A:
-//    [47:44]=OP_ALUI_A
-//    [43:40]=0 (reserved for extended opcode)
-//    [39]   = rdBank
-//    [38:36]= rdIdx
-//    [35:33]= rsA
-//    [32:27]= subop[5:0] (choose ADDI/ANDI/ORI/XORI/SLLI/SRLI/SRAI/NOT)
-//    [26:0] = imm27 (sign-extended to 48; shamt uses imm[5:0])
-//
-// 3) ALU-IMM D:
-//    [47:44]=OP_ALUI_D
-//    [43:40]=0
-//    [39]   = rdBank
-//    [38:36]= rdIdx
-//    [35:33]= rsD
-//    [32:27]= subop[5:0]
-//    [26:0] = imm27
-//
-// 4) LOAD  (LD dDst, disp(aBase)[+]):  (writes to D only)
-//    [47:44]=OP_LD
-//    [43:40]=0
-//    [39]   = post_inc (1=write back aBase+=disp; ignored if aBase==A0)
-//    [38:36]= rdD
-//    [35:33]= rsA
-//    [32:0] = disp33 (sign-extended, word units)
-//
-// 5) STORE (ST dSrc, disp(aBase)[+]):
-//    [47:44]=OP_ST
-//    [43:40]=0
-//    [39]   = post_inc
-//    [38:36]= rsD
-//    [35:33]= rsA
-//    [32:0] = disp33
-//
-// 6) BRANCH (PC-relative, word units; compares A vs D):
-//    [47:44]=OP_BR
-//    [43:40]=0
-//    [39:37]= cond (000=BEQ,001=BNE,010=BLT,011=BLTU,100=BGE,101=BGEU,111=ALWAYS)
-//    [36:34]= rsA
-//    [33:31]= rsD
-//    [30:0] = off31 (sign-extended)
-//
-// 7) JAL (rd ← PC+1; PC ← PC+1+off):
-//    [47:44]=OP_JAL
-//    [43:40]=0
-//    [39]   = rdBank
-//    [38:36]= rdIdx
-//    [35:0] = off36 (sign-extended)
-//
-// 8) JALR (target = aBase + imm; link writes to rd):
-//    [47:44]=OP_JALR
-//    [43:40]=0
-//    [39]   = rdBank
-//    [38:36]= rdIdx
-//    [35:33]= rsA
-//    [32:0] = imm33 (sign-extended)
-//
-// 9) SYS (HALT/NOP):
-//    [47:44]=OP_SYS
-//    [43:40]= funct (0=NOP, 15=HALT)
+// Instruction formats (48-bit, MSB..LSB). Reserved fields must be written as zero.
+// 1) ALU (rd <= f(A[rsA], D[rsD]), optional operand swap):
+//    [47:44]=OP_ALU
+//    [43:40]=funct (ADD/SUB/AND/OR/XOR/SLL/SRL/SRA/NOT)
+//    [39]=rdBank (0=A, 1=D), [38:36]=rdIdx, [35:33]=rsA, [32:30]=rsD
+//    [29]=swap (1 swaps operand order), [28:24]=0, [23:0]=0
+// 2) ALU-IMM A (operate on A source with sign-extended imm27/shamt):
+//    [47:44]=OP_ALUI_A, [43:40]=0
+//    [39]=rdBank, [38:36]=rdIdx, [35:33]=rsA
+//    [32:27]=subop (bits[5:4]=0, bits[3:0] select ADD/AND/OR/XOR/SLL/SRL/SRA/NOT)
+//    [26:0]=imm27 (sign-extended; low 6 bits drive shamt)
+// 3) ALU-IMM D (operate on D source with imm27, same subop encoding as ALUI_A):
+//    [47:44]=OP_ALUI_D, [43:40]=0
+//    [39]=rdBank, [38:36]=rdIdx, [35:33]=rsD, [32:27]=subop, [26:0]=imm27
+// 4) LOAD (rdD <= DMEM[A[baseA] + disp]):
+//    [47:44]=OP_LD, [43:40]=0, [39]=post_inc, [38:36]=rdD, [35:33]=baseA, [32:0]=disp33
+// 5) STORE (DMEM[A[baseA] + disp] <= D[rsD]):
+//    [47:44]=OP_ST, [43:40]=0, [39]=post_inc, [38:36]=rsD, [35:33]=baseA, [32:0]=disp33
+// 6) BRANCH (PC <= PC + 1 + off when condition on A vs D holds; offsets are word-relative):
+//    [47:44]=OP_BR, [43:40]=0
+//    [39:37]=cond (BEQ/BNE/BLT/BLTU/BGE/BGEU/ALWAYS), [36:34]=rsA, [33:31]=rsD, [30:0]=off31
+// 7) JAL (link <= PC + 1; PC <= PC + 1 + off):
+//    [47:44]=OP_JAL, [43:40]=0, [39]=rdBank, [38:36]=rdIdx, [35:0]=off36
+// 8) JALR (link <= PC + 1; PC <= A[rsA] + imm):
+//    [47:44]=OP_JALR, [43:40]=0, [39]=rdBank, [38:36]=rdIdx, [35:33]=rsA, [32:0]=imm33
+// 9) CSR (read/modify CSRs with privilege enforcement):
+//    [47:44]=OP_CSR, [43:40]=funct (RW/RS/RC/R), [39]=rdBank, [38:36]=rdIdx
+//    [35:33]=0 (reserved), [32:30]=rsD (source operand), [29:24]=0, [23:12]=csr_addr, [11:0]=0
+// 10) SYS (system functions; only HALT implemented, funct=0xF holds PC):
+//    [47:44]=OP_SYS, [43:40]=funct, [39:0]=0
 //
 // Notes:
-//  - All immediates/offsets are SIGN-extended to 48 bits.
-//  - Word-addressed: offsets/disp count words; no byte enables.
-//  - A0 reads as 0; writes to A0 ignored; post_inc suppressed when base==A0.
+//  - All immediates/offsets are sign-extended to 48 bits.
+//  - Word-addressed: offsets/disp count 48-bit words; memories operate without byte enables.
+//  - A0 always reads as 0; writes to A0 ignored; post-inc suppressed when base==A0.
+//  - CSR_STATUS[1:0] mirrors priv_mode (user/supervisor/machine); CYCLE increments every cycle, INSTRET increments on retired instructions.
 //
 // ============================================================================
 module cpu_ad48 #(
