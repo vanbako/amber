@@ -22,6 +22,55 @@ Output formats:
   `--base-address` to shift the start address when tools expect a single block.
 - `bin`: raw 48-bit words packed as 6-byte big-endian records.
 
+## Toolchain Driver
+
+For multi-source programs or repeatable ROM builds use the manifest-driven
+toolchain wrapper (`tools/ad48_toolchain.py`):
+
+```bash
+python3 tools/ad48_toolchain.py tools/examples/demo.toml
+python3 tools/ad48_toolchain.py app.toml -o build/app.memh --format memh
+python3 tools/ad48_toolchain.py tools/examples/demo.toml --run-sim
+```
+
+The manifest is standard TOML (Python 3.11+ can read it directly; on older
+interpreters install `tomli` or rely on the built-in simplified parser).  At a
+minimum provide a `[program]` table and one or more `[[segment]]` entries:
+
+```toml
+[program]
+name = "demo"
+format = "memh"         # memh | hex | bin
+output = "demo.memh"    # optional, defaults to stdout when omitted
+listing = "demo.lst"    # optional segment summary
+# imem_output = "demo.imem.memh"   # optional explicit memh artefact for simulation/backends
+
+[[segment]]
+label = "demo"          # friendly name for diagnostics/listing
+source = "demo.asm"     # path relative to this manifest
+origin = 0              # optional base offset before placing the segment
+
+[[backend]]
+type = "simulation"     # run the Icarus-based smoke test
+max_cycles = 64         # optional cycle guard (0 disables)
+# vcd = "wave/demo.vcd" # optional waveform capture
+```
+
+All segment images are assembled independently, shifted by `origin`, and merged.
+Overlapping addresses raise an error.  For contiguous `hex` output you may set
+`base_address` in `[program]` (or via `--base-address`) to force the start word;
+missing addresses are padded with `fill` (default zero).  When `listing` is set,
+the tool emits a concise per-segment report to help validate layout.  Adding a
+`[[backend]]` entry with `type = "simulation"` instructs the toolchain to build
+`tools/sim/run_core_tb.v` together with the core RTL, preload the generated
+instruction memory (the `imem_output` file if specified, otherwise an automatic
+`<name>.memh` artefact), and execute it with Icarus Verilog.  The run halts when
+the core asserts `halt` or when `max_cycles` is exceeded.  CLI switches such as
+`--run-sim`, `--sim-max-cycles`, and `--sim-vcd` can be used to enable or tweak
+the simulation flow without editing the manifest; the backend mechanism is
+structured so a future `type = "gowin"` target can slot in without touching the
+assembler or manifest format.
+
 ## Assembly Syntax Highlights
 
 - **Mnemonics:** lower-case keywords (`copy`, `add`, `subtract`, `load`,

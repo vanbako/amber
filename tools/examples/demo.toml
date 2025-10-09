@@ -1,0 +1,14 @@
+[program]
+name = "demo"
+format = "memh"
+output = "demo.memh"
+listing = "demo.lst"
+
+[[segment]]
+label = "demo"
+source = "demo.asm"
+origin = 0
+
+[[backend]]
+type = "simulation"
+max_cycles = 64
