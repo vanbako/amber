@@ -143,6 +143,7 @@ module cpu_ad48 #(
   wire [35:0] jal_off = instr[35:0];
   wire [2:0]  jr_rsA  = instr[35:33];
   wire [32:0] jr_imm33= instr[32:0];
+  wire [11:0] csr_addr= instr[23:12];
 
   // Sign-extends
   wire [47:0] SX_imm27  = {{21{imm27[26]}}, imm27};
@@ -153,6 +154,35 @@ module cpu_ad48 #(
 
   wire [47:0] base_plus_disp = rA + SX_disp33;
   wire [$clog2(DM_WORDS)-1:0] base_disp_idx = base_plus_disp[$clog2(DM_WORDS)-1:0];
+
+  // ------------------- CSR constants & state -------------------
+  localparam [1:0] PRIV_USER       = 2'd0;
+  localparam [1:0] PRIV_SUPERVISOR = 2'd1;
+  localparam [1:0] PRIV_MACHINE    = 2'd3;
+
+  localparam [11:0] CSR_STATUS     = 12'h000;
+  localparam [11:0] CSR_SCRATCH    = 12'h001;
+  localparam [11:0] CSR_EPC        = 12'h002;
+  localparam [11:0] CSR_CAUSE      = 12'h003;
+  localparam [11:0] CSR_CYCLE      = 12'hC00;
+  localparam [11:0] CSR_INSTRET    = 12'hC01;
+
+  reg [1:0]  priv_mode;
+  reg [47:0] csr_status;
+  reg [47:0] csr_scratch;
+  reg [47:0] csr_epc;
+  reg [47:0] csr_cause;
+  reg [47:0] csr_cycle;
+  reg [47:0] csr_instret;
+
+  reg [47:0] csr_read_value;
+  reg [47:0] csr_write_value;
+  reg [11:0] csr_addr_sel;
+  reg        csr_write_en;
+  reg        csr_illegal;
+  reg [1:0]  csr_required_priv;
+  reg        csr_known;
+  reg        csr_valid_access;
 
   // ------------------- Regfiles -------------------
   wire [47:0] rA, rD;
@@ -238,6 +268,16 @@ module cpu_ad48 #(
     // next PC defaults
     next_pc = pc + 48'd1;
     halt    = 1'b0;
+
+    // CSR defaults
+    csr_read_value   = 48'd0;
+    csr_write_value  = 48'd0;
+    csr_addr_sel     = 12'd0;
+    csr_write_en     = 1'b0;
+    csr_illegal      = 1'b0;
+    csr_required_priv= PRIV_MACHINE;
+    csr_known        = 1'b0;
+    csr_valid_access = 1'b0;
 
     if (resetn) begin
       case (op)
@@ -378,6 +418,95 @@ module cpu_ad48 #(
         next_pc = (rA + SX_jr33); // word-aligned inherently by word addressing
       end
 
+      OP_CSR: begin
+        csr_addr_sel      = csr_addr;
+        csr_required_priv = PRIV_MACHINE;
+        csr_known         = 1'b0;
+
+        case (csr_addr)
+          CSR_STATUS: begin
+            csr_read_value   = {csr_status[47:2], priv_mode};
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_SCRATCH: begin
+            csr_read_value   = csr_scratch;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_EPC: begin
+            csr_read_value   = csr_epc;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_CAUSE: begin
+            csr_read_value   = csr_cause;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_CYCLE: begin
+            csr_read_value   = csr_cycle;
+            csr_required_priv= PRIV_USER;
+            csr_known        = 1'b1;
+          end
+          CSR_INSTRET: begin
+            csr_read_value   = csr_instret;
+            csr_required_priv= PRIV_USER;
+            csr_known        = 1'b1;
+          end
+          default: begin
+            csr_read_value = 48'd0;
+            csr_known      = 1'b0;
+          end
+        endcase
+
+        csr_valid_access = csr_known && (priv_mode >= csr_required_priv);
+        csr_illegal      = ~csr_valid_access;
+
+        case (op_ext)
+          CSR_F_RW: begin
+            if (csr_valid_access) begin
+              csr_write_en    = 1'b1;
+              csr_write_value = rD;
+              csr_illegal     = 1'b0;
+            end
+          end
+          CSR_F_RS: begin
+            if (csr_valid_access && (rD != 48'd0)) begin
+              csr_write_en    = 1'b1;
+              csr_write_value = csr_read_value | rD;
+              csr_illegal     = 1'b0;
+            end
+          end
+          CSR_F_RC: begin
+            if (csr_valid_access && (rD != 48'd0)) begin
+              csr_write_en    = 1'b1;
+              csr_write_value = csr_read_value & ~rD;
+              csr_illegal     = 1'b0;
+            end
+          end
+          CSR_F_R: begin
+            if (csr_valid_access) begin
+              csr_illegal = 1'b0;
+            end
+          end
+          default: begin
+            csr_illegal  = 1'b1;
+            csr_write_en = 1'b0;
+          end
+        endcase
+
+        if (csr_valid_access && !csr_illegal) begin
+          if (rdBankA) begin
+            if (rdIdx != 3'd0) begin
+              weA = 1'b1; wA_idx = rdIdx; wA_data = csr_read_value;
+            end
+          end else begin
+            weD = 1'b1; wD_idx = rdIdx; wD_data = csr_read_value;
+          end
+        end
+      end
+
       OP_SYS: begin
         // funct encoded in opcode lower nibble
         if (op_ext == 4'hF) begin
@@ -395,8 +524,46 @@ module cpu_ad48 #(
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
       pc <= 48'd0;
+      priv_mode   <= PRIV_MACHINE;
+      csr_status  <= 48'd0;
+      csr_scratch <= 48'd0;
+      csr_epc     <= 48'd0;
+      csr_cause   <= 48'd0;
+      csr_cycle   <= 48'd0;
+      csr_instret <= 48'd0;
     end else begin
       pc <= next_pc;
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
+        priv_mode  <= csr_write_value[1:0];
+        csr_status <= {csr_write_value[47:2], csr_write_value[1:0]};
+      end else begin
+        csr_status[1:0] <= priv_mode;
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
+        csr_scratch <= csr_write_value;
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_EPC)) begin
+        csr_epc <= csr_write_value;
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CAUSE)) begin
+        csr_cause <= csr_write_value;
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CYCLE)) begin
+        csr_cycle <= csr_write_value;
+      end else begin
+        csr_cycle <= csr_cycle + 48'd1;
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_INSTRET)) begin
+        csr_instret <= csr_write_value;
+      end else if (!halt) begin
+        csr_instret <= csr_instret + 48'd1;
+      end
     end
   end
 endmodule

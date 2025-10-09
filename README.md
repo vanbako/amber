@@ -10,6 +10,7 @@ Amber is an experimental 48-bit RISC processor core and SoC playground aimed at 
 ## Current Capabilities (`v0.1`)
 - 48-bit single-cycle CPU with ALU, load/store, branch, and system instruction classes.
 - Dual register banks (`A` for addresses, `D` for data) with word-addressed IMEM/DMEM blocks.
+- Machine CSR file (status, scratch, EPC/CAUSE placeholders, cycle/instret counters) accessible through dedicated `csr.*` instructions.
 - Self-checking testbenches covering ALU, control-flow, and memory behaviour.
 - Tooling and documentation for assembling and loading AD48 programs.
 

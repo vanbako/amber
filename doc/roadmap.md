@@ -1,6 +1,7 @@
 # AD48 Platform Roadmap
 
 Current release: `v0.1` (single-cycle baseline core).
+In development: `v0.2` (privileged control surface) work has begun.
 
 Each milestone below builds toward a protected, multitasking operating system running on the AD48 processor and associated SoC support logic. Features are ordered to minimize backtracking and to layer high-value OS-visible capabilities first.
 

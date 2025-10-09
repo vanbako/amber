@@ -276,6 +276,7 @@ OP_ST = 0x4
 OP_BR = 0x5
 OP_JAL = 0x6
 OP_JALR = 0x7
+OP_CSR = 0x8
 OP_SYS = 0xF
 
 F_ADD = 0x0
@@ -296,6 +297,20 @@ C_BGE = 0b100
 C_BGEU = 0b101
 C_ALWAYS = 0b111
 
+CSR_F_RW = 0x0
+CSR_F_RS = 0x1
+CSR_F_RC = 0x2
+CSR_F_R = 0x3
+
+CSR_NAME_TO_ADDR = {
+    "status": 0x000,
+    "scratch": 0x001,
+    "epc": 0x002,
+    "cause": 0x003,
+    "cycle": 0xC00,
+    "instret": 0xC01,
+}
+
 
 def mask_bits(value: int, width: int) -> int:
     return value & ((1 << width) - 1)
@@ -306,6 +321,14 @@ def check_signed_range(value: int, bits: int, loc: Optional[SourceLocation] = No
     max_val = (1 << (bits - 1)) - 1
     if value < min_val or value > max_val:
         msg = f"value {value} out of range for signed {bits}-bit field"
+        if loc:
+            raise AssemblerError(f"{loc}: {msg}")
+        raise AssemblerError(msg)
+
+
+def check_unsigned_range(value: int, bits: int, loc: Optional[SourceLocation] = None) -> None:
+    if value < 0 or value >= (1 << bits):
+        msg = f"value {value} out of range for unsigned {bits}-bit field"
         if loc:
             raise AssemblerError(f"{loc}: {msg}")
         raise AssemblerError(msg)
@@ -415,6 +438,20 @@ def encode_sys(funct: int) -> int:
     value = 0
     value |= (OP_SYS & 0xF) << 44
     value |= (funct & 0xF) << 40
+    return value
+
+
+def encode_csr(funct: int, rd: Register, rs: Register, csr_addr: int, loc: Optional[SourceLocation] = None) -> int:
+    if rs.bank != "D":
+        raise AssemblerError(f"{loc}: CSR source must be D register")
+    check_unsigned_range(csr_addr, 12, loc)
+    value = 0
+    value |= (OP_CSR & 0xF) << 44
+    value |= (funct & 0xF) << 40
+    value |= (rd.rd_bank & 0x1) << 39
+    value |= (rd.index & 0x7) << 36
+    value |= (rs.index & 0x7) << 30
+    value |= (csr_addr & 0xFFF) << 12
     return value
 
 
@@ -712,6 +749,8 @@ class Assembler:
             return self._compile_branch(stmt, suffixes)
         if base == "jump":
             return self._compile_jump(stmt, suffixes)
+        if base == "csr":
+            return self._compile_csr(stmt, suffixes)
         if base in {"halt", "nop"}:
             funct = 0xF if base == "halt" else 0x0
             return InstructionSpec(1, lambda asm, addr, loc: [encode_sys(funct)])
@@ -1081,6 +1120,61 @@ class Assembler:
         def encoder(asm: "Assembler", addr: int, loc: SourceLocation) -> List[int]:
             imm = asm.eval_expr(imm_expr, addr, loc)
             return [encode_jalr(rd, base, imm, loc)]
+
+        return InstructionSpec(1, encoder)
+
+    def _compile_csr(self, stmt: Statement, suffixes: List[str]) -> InstructionSpec:
+        if not suffixes:
+            raise AssemblerError(f"{stmt.loc}: csr requires an operation suffix")
+        if len(suffixes) > 1:
+            raise AssemblerError(f"{stmt.loc}: csr accepts a single suffix, got {suffixes}")
+        op = suffixes[0]
+        alias = {
+            "rw": CSR_F_RW,
+            "write": CSR_F_RW,
+            "rs": CSR_F_RS,
+            "set": CSR_F_RS,
+            "rc": CSR_F_RC,
+            "clear": CSR_F_RC,
+            "r": CSR_F_R,
+            "read": CSR_F_R,
+        }
+        if op not in alias:
+            raise AssemblerError(f"{stmt.loc}: unknown csr operation '{op}'")
+        funct = alias[op]
+        args = stmt.args
+        discard_dest = Register("A", 0, "A0")
+        zero_src = Register("D", 0, "D0")
+
+        if funct == CSR_F_R:
+            if len(args) != 2:
+                raise AssemblerError(f"{stmt.loc}: csr.{op} expects 'csr.{op} dest, csr'")
+            dest = parse_register(args[0], loc=stmt.loc)
+            csr_token = args[1]
+            src_reg = zero_src
+        else:
+            if len(args) == 3:
+                dest = parse_register(args[0], loc=stmt.loc)
+                csr_token = args[1]
+                src_reg = parse_register(args[2], want_bank="D", loc=stmt.loc)
+            elif len(args) == 2:
+                dest = discard_dest
+                csr_token = args[0]
+                src_reg = parse_register(args[1], want_bank="D", loc=stmt.loc)
+            else:
+                raise AssemblerError(f"{stmt.loc}: csr.{op} expects 'csr.{op} dest, csr, src' or 'csr.{op} csr, src'")
+
+        csr_spec = csr_token
+
+        def encoder(asm: "Assembler", addr: int, loc: SourceLocation) -> List[int]:
+            name = csr_spec.lower()
+            if name in CSR_NAME_TO_ADDR:
+                csr_addr = CSR_NAME_TO_ADDR[name]
+            else:
+                value = asm.eval_expr(csr_spec, addr, loc)
+                check_unsigned_range(value, 12, loc)
+                csr_addr = value & 0xFFF
+            return [encode_csr(funct, dest, src_reg, csr_addr, loc)]
 
         return InstructionSpec(1, encoder)
 # -----------------------------------------------------------------------------

@@ -17,6 +17,7 @@ The intent is to keep timing simple (one instruction per cycle, aside from a HAL
 - **Writeback**: Register bank write enables and destinations are computed per instruction. LDs always target the D bank; other instructions can steer results to either bank via `rdBank`.
 - **Control flow**: Branches, JAL, and JALR compute next PC values combinationally. JAL/JALR use `PC+1` as the link value to keep word addressing consistent.
 - **System**: HALT holds the PC and raises an internal `halt` flag observed by testbenches. Non-HALT SYS encodings behave as NOP today.
+- **CSR file**: Status, scratch, EPC/CAUSE, and counter CSRs live alongside the datapath. CSR instructions apply privilege checks, update counters automatically, and keep the architectural `STATUS` view in sync with the internal `priv_mode`.
 
 Timing remains single-cycle: all combinational work completes between clock edges, and the registered PC advances every cycle except during reset or HALT. There is no pipeline and thus no hazard management logic.
 
@@ -44,6 +45,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 | `BR`  | `0101`        | PC-relative conditional branches comparing A vs D registers. |
 | `JAL` | `0110`        | Link to specified bank/register; target is `PC+1+off`. |
 | `JALR`| `0111`        | Indirect jump via A-bank plus immediate; optional link. |
+| `CSR` | `1000`        | Access machine CSRs (`csr.r`, `csr.rw`, `csr.rs`, `csr.rc`). |
 | `SYS` | `1111`        | `funct=0` NOP, `funct=15` HALT (holds PC). |
 
 ### ALU Operations
@@ -60,6 +62,22 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - Branch conditions compare `A[rsA]` against `D[rsD]` using both signed and unsigned comparators.
 - JAL/JALR links respect the `rdBank` bit; writes to `A0` are ignored by the register file.
 - HALT stabilizes `PC` by forcing `next_pc = pc` while `halt` remains asserted.
+
+### CSR Instructions
+- The `csr` opcode class provides four primitives:
+  - `csr.r rd, csr` — read the selected CSR into `rd` (source D register is ignored; use `d0`).
+  - `csr.rw rd, csr, rs` — write the CSR with `rs` and optionally capture the old value in `rd` (`a0` discards it).
+  - `csr.rs rd, csr, rs` — set bits (`CSR ← CSR ∨ rs`), returning the previous contents.
+  - `csr.rc rd, csr, rs` — clear bits (`CSR ← CSR ∧ ¬rs`), returning the previous contents.
+- Only D-bank registers may supply CSR operands; results can target either bank. The assembler also accepts friendly aliases (`csr.write`, `csr.set`, `csr.clear`, `csr.read`) that map onto the same encodings.
+- Accesses are privilege-checked against the current `priv_mode`. Machine-only CSRs (status, scratch, EPC, cause) reject reads/writes once privilege is lowered, while the cycle and instret counters are readable from all modes.
+- Writing the `STATUS` CSR updates `priv_mode` to match bits `[1:0]` of the written value so the architectural view and internal mode stay coherent. `CYCLE` increments every clock tick and `INSTRET` increments when `halt` is low; software may overwrite either counter to seed or reset them.
+- Implemented CSRs:
+  - `0x000 STATUS` — machine status flags; bits `[1:0]` mirror `priv_mode`.
+  - `0x001 SCRATCH` — general-purpose machine scratch register.
+  - `0x002 EPC` and `0x003 CAUSE` — placeholders for future trap plumbing.
+  - `0xC00 CYCLE` — free-running cycle counter.
+  - `0xC01 INSTRET` — retired-instruction counter.
 
 ## Module Breakdown
 

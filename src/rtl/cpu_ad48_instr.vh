@@ -10,6 +10,7 @@ localparam [3:0] OP_ST     = 4'h4;
 localparam [3:0] OP_BR     = 4'h5;
 localparam [3:0] OP_JAL    = 4'h6;
 localparam [3:0] OP_JALR   = 4'h7;
+localparam [3:0] OP_CSR    = 4'h8;
 localparam [3:0] OP_SYS    = 4'hF;
 
 // ALU funct / subop encodings
@@ -31,6 +32,12 @@ localparam [2:0] C_BLTU  = 3'b011;
 localparam [2:0] C_BGE   = 3'b100;
 localparam [2:0] C_BGEU  = 3'b101;
 localparam [2:0] C_ALWAYS= 3'b111;
+
+// CSR funct encodings
+localparam [3:0] CSR_F_RW  = 4'h0; // write, return old value
+localparam [3:0] CSR_F_RS  = 4'h1; // set bits, return old value
+localparam [3:0] CSR_F_RC  = 4'h2; // clear bits, return old value
+localparam [3:0] CSR_F_R   = 4'h3; // read only
 
 function [47:0] instr_alu;
   input         rdBank; // 0 = A, 1 = D
@@ -123,6 +130,17 @@ function [47:0] instr_sys;
   end
 endfunction
 
+function [47:0] instr_csr;
+  input  [3:0]  funct;
+  input         rdBank;
+  input  [2:0]  rdIdx;
+  input  [2:0]  rsD;
+  input  [11:0] csr_addr;
+  begin
+    instr_csr = {OP_CSR, funct, rdBank, rdIdx, 3'd0, rsD, 1'b0, 5'd0, csr_addr, 12'd0};
+  end
+endfunction
+
 function [5:0] pack_subop;
   input [3:0] funct;
   begin
@@ -162,6 +180,13 @@ function [32:0] pack_imm33;
   input signed [47:0] value;
   begin
     pack_imm33 = value[32:0];
+  end
+endfunction
+
+function [11:0] pack_csr_addr;
+  input [15:0] value;
+  begin
+    pack_csr_addr = value[11:0];
   end
 endfunction
 
