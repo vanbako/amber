@@ -1,0 +1,15 @@
+[program]
+name = "alu"
+format = "memh"
+output = "../../build/asm_tests/alu.memh"
+listing = "../../build/asm_tests/alu.lst"
+imem_output = "../../build/asm_tests/alu.memh"
+
+[[segment]]
+label = "alu"
+source = "alu.asm"
+
+[[backend]]
+type = "simulation"
+name = "alu-sim"
+max_cycles = 512

@@ -1,0 +1,15 @@
+[program]
+name = "control"
+format = "memh"
+output = "../../build/asm_tests/control.memh"
+listing = "../../build/asm_tests/control.lst"
+imem_output = "../../build/asm_tests/control.memh"
+
+[[segment]]
+label = "control"
+source = "control.asm"
+
+[[backend]]
+type = "simulation"
+name = "control-sim"
+max_cycles = 1024

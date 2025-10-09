@@ -1,0 +1,15 @@
+[program]
+name = "memory"
+format = "memh"
+output = "../../build/asm_tests/memory.memh"
+listing = "../../build/asm_tests/memory.lst"
+imem_output = "../../build/asm_tests/memory.memh"
+
+[[segment]]
+label = "memory"
+source = "memory.asm"
+
+[[backend]]
+type = "simulation"
+name = "memory-sim"
+max_cycles = 512
