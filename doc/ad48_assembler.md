@@ -136,7 +136,7 @@ The assembler exposes the CSR instruction family through a compact set of mnemon
 
 `csr.r`, `csr.write`, `csr.rs`, and `csr.rc` are accepted as synonyms for the respective operations above. Two-operand forms such as `csr.write status, d2` implicitly discard the readback by targeting `a0`. CSR operands must come from the D-bank; results can be written to either register file.
 
-Named CSRs are provided out of the box: `status`, `scratch`, `epc`, `cause`, `cycle`, and `instret`. Arbitrary numeric addresses are also legal (`csr.read d1, 0xC00`). The assembler masks addresses to 12 bits, so constants outside that range wrap automatically. Invalid CSR names (or insufficient privilege at run-time) simply leave the destination register untouched.
+Named CSRs are provided out of the box: `status`, `scratch`, `epc`, `cause`, `irq_enable`, `irq_pending`, `irq_vector`, `cycle`, `instret`, `timer`, and `timer_cmp`. Arbitrary numeric addresses are also legal (`csr.read d1, 0xC00`). The assembler masks addresses to 12 bits, so constants outside that range wrap automatically. Invalid CSR names (or insufficient privilege at run-time) simply leave the destination register untouched.
 
 ## Example Program
 

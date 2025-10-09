@@ -312,6 +312,8 @@ CSR_NAME_TO_ADDR = {
     "irq_vector": 0x012,
     "cycle": 0xC00,
     "instret": 0xC01,
+    "timer": 0xC02,
+    "timer_cmp": 0xC03,
 }
 
 

@@ -1,0 +1,15 @@
+[program]
+name = "timer"
+format = "memh"
+output = "../../build/asm_tests/timer.memh"
+listing = "../../build/asm_tests/timer.lst"
+imem_output = "../../build/asm_tests/timer.memh"
+
+[[segment]]
+label = "timer"
+source = "timer.asm"
+
+[[backend]]
+type = "simulation"
+name = "timer-sim"
+max_cycles = 4096

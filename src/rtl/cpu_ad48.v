@@ -147,8 +147,19 @@ module cpu_ad48 #(
   localparam [11:0] CSR_IRQ_VECTOR = 12'h012;
   localparam [11:0] CSR_CYCLE      = 12'hC00;
   localparam [11:0] CSR_INSTRET    = 12'hC01;
-  localparam integer IRQ_INDEX_WIDTH = (IRQ_LINES <= 1) ? 1 : $clog2(IRQ_LINES);
-  localparam [47:0] IRQ_LINE_MASK = (IRQ_LINES >= 48) ? {48{1'b1}} : ((48'h1 << IRQ_LINES) - 1);
+  localparam [11:0] CSR_TIMER      = 12'hC02;
+  localparam [11:0] CSR_TIMER_CMP  = 12'hC03;
+  localparam integer TIMER_IRQ_BIT = IRQ_LINES;
+  localparam integer TOTAL_IRQ_LINES = IRQ_LINES + 1;
+  localparam integer IRQ_INDEX_WIDTH = (TOTAL_IRQ_LINES <= 1) ? 1 : $clog2(TOTAL_IRQ_LINES);
+  localparam [47:0] TIMER_IRQ_BIT_MASK = (TIMER_IRQ_BIT >= 48) ? 48'd0 : (48'h1 << TIMER_IRQ_BIT);
+  localparam [47:0] IRQ_LINE_MASK = (TOTAL_IRQ_LINES >= 48) ? {48{1'b1}} : ((48'h1 << TOTAL_IRQ_LINES) - 1);
+
+  initial begin
+    if (TOTAL_IRQ_LINES > 48) begin
+      $fatal(1, "cpu_ad48: TOTAL_IRQ_LINES (%0d) exceeds supported width (48)", TOTAL_IRQ_LINES);
+    end
+  end
 
   reg [1:0]  priv_mode;
   reg [47:0] csr_status;
@@ -157,6 +168,8 @@ module cpu_ad48 #(
   reg [47:0] csr_cause;
   reg [47:0] csr_cycle;
   reg [47:0] csr_instret;
+  reg [47:0] csr_timer;
+  reg [47:0] csr_timer_cmp;
   reg [47:0] csr_irq_enable;
   reg [47:0] csr_irq_pending;
   reg [47:0] csr_irq_vector;
@@ -252,7 +265,10 @@ module cpu_ad48 #(
     .rdata(d_rdata)   // load reads, write back to D
   );
 
-  wire [47:0] irq_signals = {{(48-IRQ_LINES){1'b0}}, irq};
+  wire [47:0] irq_external = {{(48-IRQ_LINES){1'b0}}, irq};
+  wire        timer_irq_level = (csr_timer_cmp != 48'd0) && (csr_timer >= csr_timer_cmp);
+  wire [47:0] irq_timer_mask = timer_irq_level ? TIMER_IRQ_BIT_MASK : 48'd0;
+  wire [47:0] irq_signals = irq_external | irq_timer_mask;
   wire [47:0] irq_combined = csr_irq_pending | irq_signals;
   wire [47:0] irq_serviceable = irq_combined & csr_irq_enable;
 
@@ -306,7 +322,7 @@ module cpu_ad48 #(
     iret             = 1'b0;
     first_found      = 0;
 
-    for (idx = 0; idx < IRQ_LINES; idx = idx + 1) begin
+    for (idx = 0; idx < TOTAL_IRQ_LINES; idx = idx + 1) begin
       if (!first_found && irq_serviceable[idx]) begin
         irq_index = idx[IRQ_INDEX_WIDTH-1:0];
         first_found = 1;
@@ -538,6 +554,16 @@ module cpu_ad48 #(
             csr_required_priv= PRIV_USER;
             csr_known        = 1'b1;
           end
+          CSR_TIMER: begin
+            csr_read_value   = csr_timer;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_TIMER_CMP: begin
+            csr_read_value   = csr_timer_cmp;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
           default: begin
             csr_read_value = 48'd0;
             csr_known      = 1'b0;
@@ -679,6 +705,8 @@ module cpu_ad48 #(
       csr_cause         <= 48'd0;
       csr_cycle         <= 48'd0;
       csr_instret       <= 48'd0;
+      csr_timer         <= 48'd0;
+      csr_timer_cmp     <= 48'd0;
       csr_irq_enable    <= 48'd0;
       csr_irq_pending   <= 48'd0;
       csr_irq_vector    <= IRQ_VECTOR;
@@ -729,6 +757,16 @@ module cpu_ad48 #(
         csr_instret <= csr_write_value;
       end else if (!halt && !trap_pending) begin
         csr_instret <= csr_instret + 48'd1;
+      end
+
+      if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_TIMER)) begin
+        csr_timer <= csr_write_value;
+      end else begin
+        csr_timer <= csr_timer + 48'd1;
+      end
+
+      if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_TIMER_CMP)) begin
+        csr_timer_cmp <= csr_write_value;
       end
 
       if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_IRQ_ENABLE)) begin

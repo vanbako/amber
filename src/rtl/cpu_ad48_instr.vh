@@ -51,6 +51,8 @@ localparam [11:0] CSR_ADDR_IRQ_PENDING = 12'h011;
 localparam [11:0] CSR_ADDR_IRQ_VECTOR  = 12'h012;
 localparam [11:0] CSR_ADDR_CYCLE       = 12'hC00;
 localparam [11:0] CSR_ADDR_INSTRET     = 12'hC01;
+localparam [11:0] CSR_ADDR_TIMER       = 12'hC02;
+localparam [11:0] CSR_ADDR_TIMER_CMP   = 12'hC03;
 
 function [47:0] instr_alu;
   input         rdBank; // 0 = A, 1 = D

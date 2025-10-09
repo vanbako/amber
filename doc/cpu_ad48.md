@@ -82,6 +82,8 @@ Timing remains single-cycle: all combinational work completes between clock edge
   - `0x012 IRQ_VECTOR` — base PC for interrupt handlers; the selected IRQ index is added to this value on entry.
   - `0xC00 CYCLE` — free-running cycle counter.
   - `0xC01 INSTRET` — retired-instruction counter.
+  - `0xC02 TIMER` — machine timer counter that increments each cycle unless explicitly written.
+  - `0xC03 TIMER_CMP` — timer compare register; when non-zero and `TIMER ≥ TIMER_CMP`, the timer interrupt line asserts until software updates `TIMER_CMP` or clears the pending bit.
 
 ### Traps, Exceptions & Interrupts
 - The core recognises three synchronous exceptions in `v0.2`: illegal instruction decodes, software breakpoints (`SYS 1`), and misaligned data accesses (load/store addresses that overflow or underflow the configured DMEM range). In addition, level-sensitive interrupt requests presented on the `irq[IRQ_LINES-1:0]` port are latched into `CSR_IRQ_PENDING` and serviced when both the corresponding enable bit and `STATUS[MIE]` are set.
