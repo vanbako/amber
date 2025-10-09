@@ -154,6 +154,14 @@ module cpu_ad48 #(
   localparam integer IRQ_INDEX_WIDTH = (TOTAL_IRQ_LINES <= 1) ? 1 : $clog2(TOTAL_IRQ_LINES);
   localparam [47:0] TIMER_IRQ_BIT_MASK = (TIMER_IRQ_BIT >= 48) ? 48'd0 : (48'h1 << TIMER_IRQ_BIT);
   localparam [47:0] IRQ_LINE_MASK = (TOTAL_IRQ_LINES >= 48) ? {48{1'b1}} : ((48'h1 << TOTAL_IRQ_LINES) - 1);
+  localparam integer STATUS_PREV_MODE_LSB = 2;
+  localparam integer STATUS_PREV_MODE_MSB = 3;
+  localparam integer STATUS_UIE_BIT       = 4;
+  localparam integer STATUS_KIE_BIT       = 5;
+  localparam integer STATUS_MIE_BIT       = 6;
+  localparam integer STATUS_UPIE_BIT      = 7;
+  localparam integer STATUS_KPIE_BIT      = 8;
+  localparam integer STATUS_MPIE_BIT      = 9;
 
   initial begin
     if (TOTAL_IRQ_LINES > 48) begin
@@ -173,8 +181,10 @@ module cpu_ad48 #(
   reg [47:0] csr_irq_enable;
   reg [47:0] csr_irq_pending;
   reg [47:0] csr_irq_vector;
-  reg [47:0] csr_status_shadow;
 
+  wire status_uie  = csr_status[STATUS_UIE_BIT];
+  wire status_kie  = csr_status[STATUS_KIE_BIT];
+  wire status_mie  = csr_status[STATUS_MIE_BIT];
   // Exception cause codes (mirrors RISC-style numbering for familiarity)
   localparam [3:0] CAUSE_ILLEGAL_INSTR    = 4'd2;
   localparam [3:0] CAUSE_BREAKPOINT       = 4'd3;
@@ -271,6 +281,10 @@ module cpu_ad48 #(
   wire [47:0] irq_signals = irq_external | irq_timer_mask;
   wire [47:0] irq_combined = csr_irq_pending | irq_signals;
   wire [47:0] irq_serviceable = irq_combined & csr_irq_enable;
+  wire        irq_mode_enable =
+    (priv_mode == PRIV_MACHINE)    ? status_mie :
+    (priv_mode == PRIV_SUPERVISOR) ? status_kie :
+                                     status_uie;
 
   // ------------------- Control -------------------
   reg [47:0] next_pc;
@@ -328,7 +342,7 @@ module cpu_ad48 #(
         first_found = 1;
       end
     end
-    if (resetn && (first_found != 0) && (csr_status[4] == 1'b1) && (priv_mode == PRIV_MACHINE)) begin
+    if (resetn && (first_found != 0) && irq_mode_enable) begin
       interrupt = 1'b1;
     end
 
@@ -510,38 +524,39 @@ module cpu_ad48 #(
 
         case (csr_addr)
           CSR_STATUS: begin
-            csr_read_value   = {csr_status[47:2], priv_mode};
-            csr_required_priv= PRIV_MACHINE;
+            csr_read_value   = csr_status;
+            csr_read_value[1:0] = priv_mode;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_SCRATCH: begin
             csr_read_value   = csr_scratch;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_EPC: begin
             csr_read_value   = csr_epc;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_CAUSE: begin
             csr_read_value   = csr_cause;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_IRQ_ENABLE: begin
             csr_read_value   = csr_irq_enable;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_IRQ_PENDING: begin
             csr_read_value   = csr_irq_pending;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_IRQ_VECTOR: begin
             csr_read_value   = csr_irq_vector;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_CYCLE: begin
@@ -556,12 +571,12 @@ module cpu_ad48 #(
           end
           CSR_TIMER: begin
             csr_read_value   = csr_timer;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           CSR_TIMER_CMP: begin
             csr_read_value   = csr_timer_cmp;
-            csr_required_priv= PRIV_MACHINE;
+            csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
           default: begin
@@ -699,7 +714,6 @@ module cpu_ad48 #(
       pc                <= 48'd0;
       priv_mode         <= PRIV_MACHINE;
       csr_status        <= 48'd0;
-      csr_status_shadow <= 48'd0;
       csr_scratch       <= 48'd0;
       csr_epc           <= 48'd0;
       csr_cause         <= 48'd0;
@@ -718,15 +732,14 @@ module cpu_ad48 #(
       end
 
       if (trap_pending) begin
-        csr_status_shadow <= csr_status;
         priv_mode <= PRIV_MACHINE;
-        csr_status <= {csr_status[47:5], 1'b0, csr_status[3:2], PRIV_MACHINE};
+        csr_status <= status_trap_transition(csr_status, priv_mode);
       end else if (iret) begin
-        priv_mode <= csr_status_shadow[1:0];
-        csr_status <= csr_status_shadow;
+        priv_mode <= status_prev_mode(csr_status);
+        csr_status <= status_iret_transition(csr_status);
       end else if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
-        priv_mode <= csr_write_value[1:0];
-        csr_status <= {csr_write_value[47:2], csr_write_value[1:0]};
+        priv_mode <= sanitize_priv_mode(csr_write_value[1:0]);
+        csr_status <= normalize_status_write(csr_write_value, sanitize_priv_mode(csr_write_value[1:0]));
       end else begin
         csr_status[1:0] <= priv_mode;
       end
@@ -790,4 +803,86 @@ module cpu_ad48 #(
       end
     end
   end
+
+  function automatic [1:0] sanitize_priv_mode;
+    input [1:0] mode_in;
+    begin
+      case (mode_in)
+        PRIV_MACHINE:    sanitize_priv_mode = PRIV_MACHINE;
+        PRIV_SUPERVISOR: sanitize_priv_mode = PRIV_SUPERVISOR;
+        default:         sanitize_priv_mode = PRIV_USER;
+      endcase
+    end
+  endfunction
+
+  function automatic [1:0] status_prev_mode;
+    input [47:0] status_in;
+    begin
+      status_prev_mode = sanitize_priv_mode(status_in[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB]);
+    end
+  endfunction
+
+  function automatic [47:0] normalize_status_write;
+    input [47:0] write_value;
+    input [1:0]  new_mode;
+    reg [47:0] status_out;
+    begin
+      status_out = write_value;
+      status_out[1:0] = new_mode;
+      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] =
+        sanitize_priv_mode(write_value[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB]);
+      normalize_status_write = status_out;
+    end
+  endfunction
+
+  function automatic [47:0] status_trap_transition;
+    input [47:0] status_in;
+    input [1:0]  mode_in;
+    reg [47:0] status_out;
+    reg [1:0]  sanitized_mode;
+    begin
+      status_out     = status_in;
+      sanitized_mode = sanitize_priv_mode(mode_in);
+      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] = sanitized_mode;
+      case (sanitized_mode)
+        PRIV_MACHINE:    status_out[STATUS_MPIE_BIT] = status_in[STATUS_MIE_BIT];
+        PRIV_SUPERVISOR: status_out[STATUS_KPIE_BIT] = status_in[STATUS_KIE_BIT];
+        default:         status_out[STATUS_UPIE_BIT] = status_in[STATUS_UIE_BIT];
+      endcase
+      status_out[STATUS_MPIE_BIT] = status_in[STATUS_MIE_BIT];
+      status_out[STATUS_MIE_BIT] = 1'b0;
+      status_out[1:0]            = PRIV_MACHINE;
+      status_trap_transition     = status_out;
+    end
+  endfunction
+
+  function automatic [47:0] status_iret_transition;
+    input [47:0] status_in;
+    reg [47:0] status_out;
+    reg [1:0]  resume_mode;
+    begin
+      status_out  = status_in;
+      resume_mode = status_prev_mode(status_in);
+      status_out[1:0] = resume_mode;
+      status_out[STATUS_MIE_BIT] = status_in[STATUS_MPIE_BIT];
+      case (resume_mode)
+        PRIV_MACHINE: begin
+          status_out[STATUS_MIE_BIT]  = status_in[STATUS_MPIE_BIT];
+          status_out[STATUS_MPIE_BIT] = 1'b1;
+        end
+        PRIV_SUPERVISOR: begin
+          status_out[STATUS_KIE_BIT]  = status_in[STATUS_KPIE_BIT];
+          status_out[STATUS_KPIE_BIT] = 1'b1;
+        end
+        default: begin
+          status_out[STATUS_UIE_BIT]  = status_in[STATUS_UPIE_BIT];
+          status_out[STATUS_UPIE_BIT] = 1'b1;
+        end
+      endcase
+      status_out[STATUS_MPIE_BIT] = 1'b1;
+      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] = PRIV_USER;
+      status_iret_transition = status_out;
+    end
+  endfunction
+
 endmodule

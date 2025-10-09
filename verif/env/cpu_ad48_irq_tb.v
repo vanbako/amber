@@ -12,6 +12,7 @@ module cpu_ad48_irq_tb;
   localparam integer IRQ_VEC_IDX = 40;
   localparam [47:0] IRQ_VEC = 48'd40;
   localparam [47:0] TARGET_PC = 48'd7;
+  localparam integer STATUS_MIE_BIT = 6;
 
   reg clk;
   reg resetn;
@@ -48,7 +49,7 @@ module cpu_ad48_irq_tb;
       dut.IMEM.mem[TRAP_IDX] = instr_sys(SYS_F_HALT);
 
       // Main program
-      dut.IMEM.mem[0] = instr_alui_d(1'b1, 3'd1, 3'd1, pack_subop(F_ADD), pack_imm27(to48(48'h13))); // STATUS with MIE=1
+      dut.IMEM.mem[0] = instr_alui_d(1'b1, 3'd1, 3'd1, pack_subop(F_ADD), pack_imm27(to48(48'h043))); // STATUS with MIE=1
       dut.IMEM.mem[1] = instr_csr   (CSR_F_RW, 1'b0, 3'd0, 3'd1, pack_csr_addr(CSR_ADDR_STATUS));
       dut.IMEM.mem[2] = instr_alui_d(1'b1, 3'd2, 3'd2, pack_subop(F_ADD), pack_imm27(to48(1)));     // IRQ enable mask (bit 0)
       dut.IMEM.mem[3] = instr_csr   (CSR_F_RW, 1'b0, 3'd0, 3'd2, pack_csr_addr(CSR_ADDR_IRQ_ENABLE));
@@ -80,8 +81,8 @@ module cpu_ad48_irq_tb;
         $display("IRQ TB: CAUSE index mismatch. Got %0d expected %0d", dut.csr_cause[5:0], 0);
         $fatal(1);
       end
-      if (dut.csr_status[4] !== 1'b1) begin
-        $display("IRQ TB: STATUS[4] (MIE) not restored. Got %b", dut.csr_status[4]);
+      if (dut.csr_status[STATUS_MIE_BIT] !== 1'b1) begin
+        $display("IRQ TB: STATUS[MIE] not restored. Got %b", dut.csr_status[STATUS_MIE_BIT]);
         $fatal(1);
       end
       if (dut.csr_irq_enable[0] !== 1'b1) begin

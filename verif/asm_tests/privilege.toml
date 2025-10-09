@@ -1,0 +1,15 @@
+[program]
+name = "privilege"
+format = "memh"
+output = "../../build/asm_tests/privilege.memh"
+listing = "../../build/asm_tests/privilege.lst"
+imem_output = "../../build/asm_tests/privilege.memh"
+
+[[segment]]
+label = "privilege"
+source = "privilege.asm"
+
+[[backend]]
+type = "simulation"
+name = "privilege-sim"
+max_cycles = 1024

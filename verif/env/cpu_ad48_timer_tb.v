@@ -72,7 +72,7 @@ module cpu_ad48_timer_tb;
 
       // Main program
       idx = 0;
-      dut.IMEM.mem[idx++] = instr_alui_d(1'b1, 3'd1, 3'd0, pack_subop(F_ADD), pack_imm27(to48(48'h13))); // STATUS: MIE=1, priv=machine
+      dut.IMEM.mem[idx++] = instr_alui_d(1'b1, 3'd1, 3'd0, pack_subop(F_ADD), pack_imm27(to48(48'h043))); // STATUS: MIE=1, priv=machine
       dut.IMEM.mem[idx++] = instr_csr   (CSR_F_RW, 1'b0, 3'd0, 3'd1, pack_csr_addr(CSR_ADDR_STATUS));
       dut.IMEM.mem[idx++] = instr_alui_d(1'b1, 3'd7, 3'd0, pack_subop(F_ADD), pack_imm27(to48(48'h1 << TIMER_IRQ_BIT))); // mask for timer IRQ
       dut.IMEM.mem[idx++] = instr_csr   (CSR_F_RW, 1'b0, 3'd0, 3'd7, pack_csr_addr(CSR_ADDR_IRQ_ENABLE));

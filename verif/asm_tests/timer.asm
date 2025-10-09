@@ -41,7 +41,7 @@ start:
     LOAD_IMM_D d2, TIMER_FIRST_CMP
     csr.write timer_cmp, d2
 
-    LOAD_IMM_D d1, 0x13          ; machine mode with MIE=1
+    LOAD_IMM_D d1, 0x43          ; machine mode with MIE=1
     csr.write status, d1
 
     csr.write irq_enable, d7
@@ -71,9 +71,9 @@ wait_ticks:
 
     csr.read d1, status
     copy a6, d1
-    LOAD_IMM_D d6, 0x10
+    LOAD_IMM_D d6, 0x40
     and d1, a6, d6
-    ASSERT_D_EQ d1, 0x10
+    ASSERT_D_EQ d1, 0x40
 
     csr.read d4, cause
     copy a6, d4

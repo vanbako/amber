@@ -28,7 +28,7 @@ start:
     csr.write irq_vector, d3
 
     ; Raising MIE with a pending bit latched should trigger an interrupt.
-    LOAD_IMM_D d1, 0x13
+    LOAD_IMM_D d1, 0x43
     csr.write status, d1
 
 after_interrupt:
@@ -57,10 +57,10 @@ after_interrupt:
     ASSERT_D_EQ d4, 1
 
     csr.read d5, status
-    LOAD_IMM_D d6, 0x10
+    LOAD_IMM_D d6, 0x40
     copy a1, d5
     and d5, a1, d6
-    ASSERT_D_EQ d5, 0x10
+    ASSERT_D_EQ d5, 0x40
 
     halt
 
