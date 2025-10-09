@@ -307,6 +307,9 @@ CSR_NAME_TO_ADDR = {
     "scratch": 0x001,
     "epc": 0x002,
     "cause": 0x003,
+    "irq_enable": 0x010,
+    "irq_pending": 0x011,
+    "irq_vector": 0x012,
     "cycle": 0xC00,
     "instret": 0xC01,
 }
@@ -754,6 +757,8 @@ class Assembler:
         if base in {"halt", "nop"}:
             funct = 0xF if base == "halt" else 0x0
             return InstructionSpec(1, lambda asm, addr, loc: [encode_sys(funct)])
+        if base == "iret":
+            return InstructionSpec(1, lambda asm, addr, loc: [encode_sys(0x2)])
         if base == "system":
             if not stmt.args:
                 raise AssemblerError(f"{stmt.loc}: system requires a funct value")

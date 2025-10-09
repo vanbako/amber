@@ -6,23 +6,23 @@
 module cpu_ad48_csr_tb;
   localparam IM_WORDS = 128;
   localparam DM_WORDS = 32;
+  localparam IRQ_LINES = 4;
 
   reg clk;
   reg resetn;
+  wire [IRQ_LINES-1:0] irq_lines = {IRQ_LINES{1'b0}};
 
   cpu_ad48 #(
     .IM_WORDS(IM_WORDS),
-    .DM_WORDS(DM_WORDS)
+    .DM_WORDS(DM_WORDS),
+    .IRQ_LINES(IRQ_LINES)
   ) dut (
     .clk   (clk),
-    .resetn(resetn)
+    .resetn(resetn),
+    .irq   (irq_lines)
   );
 
   `include "../../src/rtl/cpu_ad48_instr.vh"
-
-  localparam [11:0] CSR_ADDR_STATUS  = 12'h000;
-  localparam [11:0] CSR_ADDR_SCRATCH = 12'h001;
-  localparam [11:0] CSR_ADDR_CYCLE   = 12'hC00;
   localparam [11:0] CSR_ADDR_INVALID = 12'h3FF;
 
   initial begin

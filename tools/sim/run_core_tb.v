@@ -8,9 +8,11 @@ module run_core_tb;
   parameter integer IM_WORDS = 1024;
   parameter integer DM_WORDS = 1024;
   parameter integer CLK_PERIOD_NS = 10;
+  parameter integer IRQ_LINES = 4;
 
   reg clk = 1'b0;
   reg resetn = 1'b0;
+  reg [IRQ_LINES-1:0] irq_lines = {IRQ_LINES{1'b0}};
 
   integer cycle_count = 0;
   integer max_cycles = 0;
@@ -21,10 +23,12 @@ module run_core_tb;
 
   cpu_ad48 #(
     .IM_WORDS(IM_WORDS),
-    .DM_WORDS(DM_WORDS)
+    .DM_WORDS(DM_WORDS),
+    .IRQ_LINES(IRQ_LINES)
   ) dut (
     .clk(clk),
-    .resetn(resetn)
+    .resetn(resetn),
+    .irq(irq_lines)
   );
 
   initial begin
@@ -82,4 +86,3 @@ module run_core_tb;
     end
   end
 endmodule
-

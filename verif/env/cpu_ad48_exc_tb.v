@@ -8,17 +8,21 @@ module cpu_ad48_exc_tb;
   localparam DM_WORDS = 16;
   localparam integer TRAP_IDX = 32;
   localparam [47:0] TRAP_VEC = 48'd32;
+  localparam IRQ_LINES = 4;
 
   reg clk;
   reg resetn;
+  wire [IRQ_LINES-1:0] irq_lines = {IRQ_LINES{1'b0}};
 
   cpu_ad48 #(
     .IM_WORDS(IM_WORDS),
     .DM_WORDS(DM_WORDS),
-    .TRAP_VECTOR(TRAP_VEC)
+    .TRAP_VECTOR(TRAP_VEC),
+    .IRQ_LINES(IRQ_LINES)
   ) dut (
     .clk   (clk),
-    .resetn(resetn)
+    .resetn(resetn),
+    .irq   (irq_lines)
   );
 
   `include "../../src/rtl/cpu_ad48_instr.vh"

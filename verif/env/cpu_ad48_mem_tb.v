@@ -6,16 +6,20 @@
 module cpu_ad48_mem_tb;
   localparam IM_WORDS = 128;
   localparam DM_WORDS = 128;
+  localparam IRQ_LINES = 4;
 
   reg clk;
   reg resetn;
+  wire [IRQ_LINES-1:0] irq_lines = {IRQ_LINES{1'b0}};
 
   cpu_ad48 #(
     .IM_WORDS(IM_WORDS),
-    .DM_WORDS(DM_WORDS)
+    .DM_WORDS(DM_WORDS),
+    .IRQ_LINES(IRQ_LINES)
   ) dut (
     .clk   (clk),
-    .resetn(resetn)
+    .resetn(resetn),
+    .irq   (irq_lines)
   );
 
   `include "../../src/rtl/cpu_ad48_instr.vh"

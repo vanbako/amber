@@ -1,0 +1,15 @@
+[program]
+name = "interrupt"
+format = "memh"
+output = "../../build/asm_tests/interrupt.memh"
+listing = "../../build/asm_tests/interrupt.lst"
+imem_output = "../../build/asm_tests/interrupt.memh"
+
+[[segment]]
+label = "interrupt"
+source = "interrupt.asm"
+
+[[backend]]
+type = "simulation"
+name = "interrupt-sim"
+max_cycles = 2048

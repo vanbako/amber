@@ -51,10 +51,13 @@
 module cpu_ad48 #(
   parameter IM_WORDS = 16384,
   parameter DM_WORDS = 16384,
-  parameter [47:0] TRAP_VECTOR = 48'd64
+  parameter IRQ_LINES = 4,
+  parameter [47:0] TRAP_VECTOR = 48'd64,
+  parameter [47:0] IRQ_VECTOR = 48'd128
 )(
-  input  clk,
-  input  resetn
+  input                    clk,
+  input                    resetn,
+  input  [IRQ_LINES-1:0]   irq
 );
   // Reset include guard so compile order doesn't drop instruction constants.
 `ifdef CPU_AD48_INSTR_VH
@@ -139,8 +142,13 @@ module cpu_ad48 #(
   localparam [11:0] CSR_SCRATCH    = 12'h001;
   localparam [11:0] CSR_EPC        = 12'h002;
   localparam [11:0] CSR_CAUSE      = 12'h003;
+  localparam [11:0] CSR_IRQ_ENABLE = 12'h010;
+  localparam [11:0] CSR_IRQ_PENDING= 12'h011;
+  localparam [11:0] CSR_IRQ_VECTOR = 12'h012;
   localparam [11:0] CSR_CYCLE      = 12'hC00;
   localparam [11:0] CSR_INSTRET    = 12'hC01;
+  localparam integer IRQ_INDEX_WIDTH = (IRQ_LINES <= 1) ? 1 : $clog2(IRQ_LINES);
+  localparam [47:0] IRQ_LINE_MASK = (IRQ_LINES >= 48) ? {48{1'b1}} : ((48'h1 << IRQ_LINES) - 1);
 
   reg [1:0]  priv_mode;
   reg [47:0] csr_status;
@@ -149,6 +157,10 @@ module cpu_ad48 #(
   reg [47:0] csr_cause;
   reg [47:0] csr_cycle;
   reg [47:0] csr_instret;
+  reg [47:0] csr_irq_enable;
+  reg [47:0] csr_irq_pending;
+  reg [47:0] csr_irq_vector;
+  reg [47:0] csr_status_shadow;
 
   // Exception cause codes (mirrors RISC-style numbering for familiarity)
   localparam [3:0] CAUSE_ILLEGAL_INSTR    = 4'd2;
@@ -162,6 +174,13 @@ module cpu_ad48 #(
   reg        breakpoint_instr;
   reg        misaligned_load;
   reg        misaligned_store;
+  reg        interrupt;
+  reg [IRQ_INDEX_WIDTH-1:0] irq_index;
+  reg        trap_taken;
+  reg [47:0] trap_vector;
+  reg [47:0] trap_cause_value;
+  reg [47:0] trap_epc_value;
+  reg        iret;
 
   reg [47:0] csr_read_value;
   reg [47:0] csr_write_value;
@@ -233,12 +252,18 @@ module cpu_ad48 #(
     .rdata(d_rdata)   // load reads, write back to D
   );
 
+  wire [47:0] irq_signals = {{(48-IRQ_LINES){1'b0}}, irq};
+  wire [47:0] irq_combined = csr_irq_pending | irq_signals;
+  wire [47:0] irq_serviceable = irq_combined & csr_irq_enable;
+
   // ------------------- Control -------------------
   reg [47:0] next_pc;
   reg        halt;
 
   // Main decode
   always @* begin
+    integer idx;
+    integer first_found;
     // defaults
     weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
     weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
@@ -272,6 +297,24 @@ module cpu_ad48 #(
     misaligned_store = 1'b0;
     exception        = 1'b0;
     exception_code   = 4'd0;
+    interrupt        = 1'b0;
+    irq_index        = {IRQ_INDEX_WIDTH{1'b0}};
+    trap_taken       = 1'b0;
+    trap_vector      = TRAP_VECTOR;
+    trap_cause_value = 48'd0;
+    trap_epc_value   = pc;
+    iret             = 1'b0;
+    first_found      = 0;
+
+    for (idx = 0; idx < IRQ_LINES; idx = idx + 1) begin
+      if (!first_found && irq_serviceable[idx]) begin
+        irq_index = idx[IRQ_INDEX_WIDTH-1:0];
+        first_found = 1;
+      end
+    end
+    if (resetn && (first_found != 0) && (csr_status[4] == 1'b1) && (priv_mode == PRIV_MACHINE)) begin
+      interrupt = 1'b1;
+    end
 
     if (resetn) begin
       case (op)
@@ -470,6 +513,21 @@ module cpu_ad48 #(
             csr_required_priv= PRIV_MACHINE;
             csr_known        = 1'b1;
           end
+          CSR_IRQ_ENABLE: begin
+            csr_read_value   = csr_irq_enable;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_IRQ_PENDING: begin
+            csr_read_value   = csr_irq_pending;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
+          CSR_IRQ_VECTOR: begin
+            csr_read_value   = csr_irq_vector;
+            csr_required_priv= PRIV_MACHINE;
+            csr_known        = 1'b1;
+          end
           CSR_CYCLE: begin
             csr_read_value   = csr_cycle;
             csr_required_priv= PRIV_USER;
@@ -545,6 +603,14 @@ module cpu_ad48 #(
           4'h1: begin
             breakpoint_instr = 1'b1;
           end
+          4'h2: begin
+            if (priv_mode != PRIV_MACHINE) begin
+              illegal_instr = 1'b1;
+            end else begin
+              next_pc = csr_epc;
+              iret = 1'b1;
+            end
+          end
           4'hF: begin
             halt = 1'b1; next_pc = pc; // hold PC
           end
@@ -578,6 +644,18 @@ module cpu_ad48 #(
     end
 
     if (exception) begin
+      trap_taken       = 1'b1;
+      trap_vector      = TRAP_VECTOR;
+      trap_cause_value = {44'd0, exception_code};
+    end else if (interrupt) begin
+      trap_taken       = 1'b1;
+      trap_vector      = csr_irq_vector + {{(48-IRQ_INDEX_WIDTH){1'b0}}, irq_index};
+      trap_cause_value = 48'd0;
+      trap_cause_value[47] = 1'b1;
+      trap_cause_value[IRQ_INDEX_WIDTH-1:0] = irq_index;
+    end
+
+    if (trap_taken) begin
       weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
       weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
       d_we = 1'b0;
@@ -588,42 +666,50 @@ module cpu_ad48 #(
   end
 
   // ------------------- State update -------------------
-  wire exception_pending = exception;
+  wire trap_pending = trap_taken;
 
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
-      pc <= 48'd0;
-      priv_mode   <= PRIV_MACHINE;
-      csr_status  <= 48'd0;
-      csr_scratch <= 48'd0;
-      csr_epc     <= 48'd0;
-      csr_cause   <= 48'd0;
-      csr_cycle   <= 48'd0;
-      csr_instret <= 48'd0;
+      pc                <= 48'd0;
+      priv_mode         <= PRIV_MACHINE;
+      csr_status        <= 48'd0;
+      csr_status_shadow <= 48'd0;
+      csr_scratch       <= 48'd0;
+      csr_epc           <= 48'd0;
+      csr_cause         <= 48'd0;
+      csr_cycle         <= 48'd0;
+      csr_instret       <= 48'd0;
+      csr_irq_enable    <= 48'd0;
+      csr_irq_pending   <= 48'd0;
+      csr_irq_vector    <= IRQ_VECTOR;
     end else begin
-      if (exception_pending) begin
-        pc <= TRAP_VECTOR;
+      if (trap_pending) begin
+        pc <= trap_vector;
       end else begin
         pc <= next_pc;
       end
 
-      if (exception_pending) begin
-        priv_mode  <= PRIV_MACHINE;
-        csr_status <= {csr_status[47:2], PRIV_MACHINE};
+      if (trap_pending) begin
+        csr_status_shadow <= csr_status;
+        priv_mode <= PRIV_MACHINE;
+        csr_status <= {csr_status[47:5], 1'b0, csr_status[3:2], PRIV_MACHINE};
+      end else if (iret) begin
+        priv_mode <= csr_status_shadow[1:0];
+        csr_status <= csr_status_shadow;
       end else if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
-        priv_mode  <= csr_write_value[1:0];
+        priv_mode <= csr_write_value[1:0];
         csr_status <= {csr_write_value[47:2], csr_write_value[1:0]};
       end else begin
         csr_status[1:0] <= priv_mode;
       end
 
-      if (!exception_pending && csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
+      if (!trap_pending && csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
         csr_scratch <= csr_write_value;
       end
 
-      if (exception_pending) begin
-        csr_epc   <= pc;
-        csr_cause <= {44'd0, exception_code};
+      if (trap_pending) begin
+        csr_epc   <= trap_epc_value;
+        csr_cause <= trap_cause_value;
       end else begin
         if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_EPC)) begin
           csr_epc <= csr_write_value;
@@ -633,16 +719,36 @@ module cpu_ad48 #(
         end
       end
 
-      if (csr_write_en && !csr_illegal && !exception_pending && (csr_addr_sel == CSR_CYCLE)) begin
+      if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_CYCLE)) begin
         csr_cycle <= csr_write_value;
       end else begin
         csr_cycle <= csr_cycle + 48'd1;
       end
 
-      if (csr_write_en && !csr_illegal && !exception_pending && (csr_addr_sel == CSR_INSTRET)) begin
+      if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_INSTRET)) begin
         csr_instret <= csr_write_value;
-      end else if (!halt && !exception_pending) begin
+      end else if (!halt && !trap_pending) begin
         csr_instret <= csr_instret + 48'd1;
+      end
+
+      if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_IRQ_ENABLE)) begin
+        csr_irq_enable <= (csr_write_value & IRQ_LINE_MASK);
+      end else begin
+        csr_irq_enable <= (csr_irq_enable & IRQ_LINE_MASK);
+      end
+
+      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_IRQ_VECTOR)) begin
+        csr_irq_vector <= csr_write_value;
+      end
+
+      begin : pending_update
+        reg [47:0] pending_new;
+        pending_new = csr_irq_pending & IRQ_LINE_MASK;
+        if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_IRQ_PENDING)) begin
+          pending_new = csr_write_value & IRQ_LINE_MASK;
+        end
+        pending_new = pending_new | (irq_signals & IRQ_LINE_MASK);
+        csr_irq_pending <= pending_new;
       end
     end
   end

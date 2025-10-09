@@ -12,6 +12,10 @@ localparam [3:0] OP_JAL    = 4'h6;
 localparam [3:0] OP_JALR   = 4'h7;
 localparam [3:0] OP_CSR    = 4'h8;
 localparam [3:0] OP_SYS    = 4'hF;
+localparam [3:0] SYS_F_NOP   = 4'h0;
+localparam [3:0] SYS_F_BREAK = 4'h1;
+localparam [3:0] SYS_F_IRET  = 4'h2;
+localparam [3:0] SYS_F_HALT  = 4'hF;
 
 // ALU funct / subop encodings
 localparam [3:0] F_ADD = 4'h0;
@@ -38,6 +42,15 @@ localparam [3:0] CSR_F_RW  = 4'h0; // write, return old value
 localparam [3:0] CSR_F_RS  = 4'h1; // set bits, return old value
 localparam [3:0] CSR_F_RC  = 4'h2; // clear bits, return old value
 localparam [3:0] CSR_F_R   = 4'h3; // read only
+localparam [11:0] CSR_ADDR_STATUS      = 12'h000;
+localparam [11:0] CSR_ADDR_SCRATCH     = 12'h001;
+localparam [11:0] CSR_ADDR_EPC         = 12'h002;
+localparam [11:0] CSR_ADDR_CAUSE       = 12'h003;
+localparam [11:0] CSR_ADDR_IRQ_ENABLE  = 12'h010;
+localparam [11:0] CSR_ADDR_IRQ_PENDING = 12'h011;
+localparam [11:0] CSR_ADDR_IRQ_VECTOR  = 12'h012;
+localparam [11:0] CSR_ADDR_CYCLE       = 12'hC00;
+localparam [11:0] CSR_ADDR_INSTRET     = 12'hC01;
 
 function [47:0] instr_alu;
   input         rdBank; // 0 = A, 1 = D
