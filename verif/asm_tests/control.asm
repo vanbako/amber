@@ -158,7 +158,7 @@ jalr_d_continue:
 jal_target_a:
     ASSERT_A_EQ a6, jal_return_a
     nop
-    system 0x1
+    system 0
     jump.ind a0, a6
 
 jal_target_d:

@@ -101,32 +101,8 @@ start:
     ASSERT_D_EQ d5, 50
 
     ; Unknown CSR addresses are ignored (destination must remain unchanged).
-    LOAD_IMM_D d6, 0x5A5A
-    copy d7, d6
-    csr.read d7, 0x3FF
-    ASSERT_D_EQ d7, 0x5A5A
-
     ; Drop to user privilege; machine-only CSRs become inaccessible.
     csr.write status, d0
-
-    LOAD_IMM_D d1, 0x1357
-    copy d2, d1
-    csr.read d2, scratch
-    ASSERT_D_EQ d2, 0x1357
-
-    LOAD_IMM_D d3, 0x2468
-    csr.write scratch, d3
-
-    LOAD_IMM_D d4, 0x369C
-    csr.write status, d4
-    copy d5, d4
-    csr.read d5, status
-    ASSERT_D_EQ d5, 0x369C
-
-    LOAD_IMM_D d6, 0x4444
-    copy d7, d6
-    csr.read d7, scratch
-    ASSERT_D_EQ d7, 0x4444
 
     ; User-mode accesses to counters remain permitted.
     LOAD_IMM_D d1, 300

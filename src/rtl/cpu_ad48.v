@@ -50,7 +50,8 @@
 // ============================================================================
 module cpu_ad48 #(
   parameter IM_WORDS = 16384,
-  parameter DM_WORDS = 16384
+  parameter DM_WORDS = 16384,
+  parameter [47:0] TRAP_VECTOR = 48'd64
 )(
   input  clk,
   input  resetn
@@ -117,8 +118,16 @@ module cpu_ad48 #(
   wire [47:0] SX_br31   = {{17{br_off31[30]}}, br_off31};
   wire [47:0] SX_jal36  = {{12{jal_off[35]}}, jal_off};
   wire [47:0] SX_jr33   = {{15{jr_imm33[32]}}, jr_imm33};
+  wire [48:0] jalr_target_ext = {1'b0, rA} + {SX_jr33[47], SX_jr33};
+  wire [47:0] jalr_target     = jalr_target_ext[47:0];
+  wire        jalr_target_ovf = jalr_target_ext[48];
+  wire        jalr_target_oob = jalr_target_ovf || (jalr_target >= IM_WORDS);
 
-  wire [47:0] base_plus_disp = rA + SX_disp33;
+  wire [48:0] base_plus_disp_ext = {1'b0, rA} + {SX_disp33[47], SX_disp33};
+  wire [47:0] base_plus_disp     = base_plus_disp_ext[47:0];
+  wire        base_plus_disp_ovf = base_plus_disp_ext[48];
+  wire        base_plus_disp_oob = (base_plus_disp >= DM_WORDS);
+  wire        mem_addr_invalid   = base_plus_disp_ovf || base_plus_disp_oob;
   wire [$clog2(DM_WORDS)-1:0] base_disp_idx = base_plus_disp[$clog2(DM_WORDS)-1:0];
 
   // ------------------- CSR constants & state -------------------
@@ -140,6 +149,19 @@ module cpu_ad48 #(
   reg [47:0] csr_cause;
   reg [47:0] csr_cycle;
   reg [47:0] csr_instret;
+
+  // Exception cause codes (mirrors RISC-style numbering for familiarity)
+  localparam [3:0] CAUSE_ILLEGAL_INSTR    = 4'd2;
+  localparam [3:0] CAUSE_BREAKPOINT       = 4'd3;
+  localparam [3:0] CAUSE_MISALIGNED_LOAD  = 4'd4;
+  localparam [3:0] CAUSE_MISALIGNED_STORE = 4'd6;
+
+  reg        exception;
+  reg [3:0]  exception_code;
+  reg        illegal_instr;
+  reg        breakpoint_instr;
+  reg        misaligned_load;
+  reg        misaligned_store;
 
   reg [47:0] csr_read_value;
   reg [47:0] csr_write_value;
@@ -244,11 +266,19 @@ module cpu_ad48 #(
     csr_required_priv= PRIV_MACHINE;
     csr_known        = 1'b0;
     csr_valid_access = 1'b0;
+    illegal_instr    = 1'b0;
+    breakpoint_instr = 1'b0;
+    misaligned_load  = 1'b0;
+    misaligned_store = 1'b0;
+    exception        = 1'b0;
+    exception_code   = 4'd0;
 
     if (resetn) begin
       case (op)
       OP_ALU: begin
         // Map extended opcode nibble to ALU op
+        reg op_valid;
+        op_valid = 1'b1;
         case (op_ext)
           F_ADD: alu_op = 6'h00;
           F_SUB: alu_op = 6'h01;
@@ -259,63 +289,82 @@ module cpu_ad48 #(
           F_SRL: begin alu_op = 6'h06; shamt = (swap ? rA[5:0] : rD[5:0]); end
           F_SRA: begin alu_op = 6'h07; shamt = (swap ? rA[5:0] : rD[5:0]); end
           F_NOT: alu_op = 6'h08;
-          default: alu_op = 6'h00;
+          default: op_valid = 1'b0;
         endcase
-        // Writeback
-        if (rdBankA) begin
-          weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+        if (op_valid) begin
+          if (rdBankA) begin
+            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+          end else begin
+            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          end
         end else begin
-          weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          illegal_instr = 1'b1;
         end
       end
 
       OP_ALUI_A: begin
         // Unary on A with immediate
-        alu_a = rA;
-        alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
-        shamt = imm27[5:0];
+      alu_a = rA;
+      alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
+      shamt = imm27[5:0];
 
-        case (subop[3:0])
-          F_ADD: alu_op = 6'h00; // ADDI_A
-          F_AND: alu_op = 6'h02; // ANDI_A
-          F_OR : alu_op = 6'h03; // ORI_A
-          F_XOR: alu_op = 6'h04; // XORI_A
-          F_SLL: alu_op = 6'h05; // SLLI_A
-          F_SRL: alu_op = 6'h06; // SRLI_A
-          F_SRA: alu_op = 6'h07; // SRAI_A
-          F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT A
-          default: alu_op = 6'h00;
-        endcase
+        begin
+          reg op_valid;
+          op_valid = 1'b1;
+          case (subop[3:0])
+            F_ADD: alu_op = 6'h00; // ADDI_A
+            F_AND: alu_op = 6'h02; // ANDI_A
+            F_OR : alu_op = 6'h03; // ORI_A
+            F_XOR: alu_op = 6'h04; // XORI_A
+            F_SLL: alu_op = 6'h05; // SLLI_A
+            F_SRL: alu_op = 6'h06; // SRLI_A
+            F_SRA: alu_op = 6'h07; // SRAI_A
+            F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT A
+            default: op_valid = 1'b0;
+          endcase
 
-        if (rdBankA) begin
-          weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-        end else begin
-          weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          if (op_valid) begin
+            if (rdBankA) begin
+              weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+            end else begin
+              weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+            end
+          end else begin
+            illegal_instr = 1'b1;
+          end
         end
       end
 
       OP_ALUI_D: begin
         // Unary on D with immediate
-        alu_a = rD;
-        alu_b = SX_imm27;
-        shamt = imm27[5:0];
+      alu_a = rD;
+      alu_b = SX_imm27;
+      shamt = imm27[5:0];
 
-        case (subop[3:0])
-          F_ADD: alu_op = 6'h00; // ADDI_D
-          F_AND: alu_op = 6'h02; // ANDI_D
-          F_OR : alu_op = 6'h03; // ORI_D
-          F_XOR: alu_op = 6'h04; // XORI_D
-          F_SLL: alu_op = 6'h05; // SLLI_D
-          F_SRL: alu_op = 6'h06; // SRLI_D
-          F_SRA: alu_op = 6'h07; // SRAI_D
-          F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT D
-          default: alu_op = 6'h00;
-        endcase
+        begin
+          reg op_valid;
+          op_valid = 1'b1;
+          case (subop[3:0])
+            F_ADD: alu_op = 6'h00; // ADDI_D
+            F_AND: alu_op = 6'h02; // ANDI_D
+            F_OR : alu_op = 6'h03; // ORI_D
+            F_XOR: alu_op = 6'h04; // XORI_D
+            F_SLL: alu_op = 6'h05; // SLLI_D
+            F_SRL: alu_op = 6'h06; // SRLI_D
+            F_SRA: alu_op = 6'h07; // SRAI_D
+            F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT D
+            default: op_valid = 1'b0;
+          endcase
 
-        if (rdBankA) begin
-          weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-        end else begin
-          weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          if (op_valid) begin
+            if (rdBankA) begin
+              weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+            end else begin
+              weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+            end
+          end else begin
+            illegal_instr = 1'b1;
+          end
         end
       end
 
@@ -324,24 +373,31 @@ module cpu_ad48 #(
         // DMEM is word-addressed: use low address bits sized to DM_WORDS
         // LD always writes to D bank (rdD)
         // Optional post-inc: A[baseA] += disp (suppressed if baseA==A0)
-        // Compute address using ALU add for consistency
-        alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-        d_addr = base_disp_idx;
-        weD = 1'b1; wD_idx = ld_rdD; wD_data = d_rdata;
+        if (mem_addr_invalid) begin
+          misaligned_load = 1'b1;
+        end else begin
+          alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
+          d_addr = base_disp_idx;
+          weD = 1'b1; wD_idx = ld_rdD; wD_data = d_rdata;
 
-        // post-inc writeback to A (but never to A0)
-        if (postinc && (baseA != 3'd0)) begin
-          weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          // post-inc writeback to A (but never to A0)
+          if (postinc && (baseA != 3'd0)) begin
+            weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          end
         end
       end
 
       OP_ST: begin
-        alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-        d_addr = base_disp_idx;
-        d_we   = 1'b1;
+        if (mem_addr_invalid) begin
+          misaligned_store = 1'b1;
+        end else begin
+          alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
+          d_addr = base_disp_idx;
+          d_we   = 1'b1;
 
-        if (postinc && (baseA != 3'd0)) begin
-          weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          if (postinc && (baseA != 3'd0)) begin
+            weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          end
         end
       end
 
@@ -381,7 +437,11 @@ module cpu_ad48 #(
         end else begin
           weA = (j_rdIdx != 3'd0); wA_idx = j_rdIdx; wA_data = pc + 48'd1;
         end
-        next_pc = (rA + SX_jr33); // word-aligned inherently by word addressing
+        if (jalr_target_oob) begin
+          illegal_instr = 1'b1;
+        end else begin
+          next_pc = jalr_target; // word-aligned inherently by word addressing
+        end
       end
 
       OP_CSR: begin
@@ -471,22 +531,65 @@ module cpu_ad48 #(
             weD = 1'b1; wD_idx = rdIdx; wD_data = csr_read_value;
           end
         end
+        if (csr_illegal) begin
+          illegal_instr = 1'b1;
+        end
       end
 
       OP_SYS: begin
         // funct encoded in opcode lower nibble
-        if (op_ext == 4'hF) begin
-          halt = 1'b1; next_pc = pc; // hold PC
-        end
-        // else NOP
+        case (op_ext)
+          4'h0: begin
+            // NOP
+          end
+          4'h1: begin
+            breakpoint_instr = 1'b1;
+          end
+          4'hF: begin
+            halt = 1'b1; next_pc = pc; // hold PC
+          end
+          default: begin
+            illegal_instr = 1'b1;
+          end
+        endcase
       end
 
-      default: ; // NOP
+      default: illegal_instr = 1'b1;
       endcase
+    end
+
+    if (resetn) begin
+      if (illegal_instr) begin
+        exception      = 1'b1;
+        exception_code = CAUSE_ILLEGAL_INSTR;
+      end else if (breakpoint_instr) begin
+        exception      = 1'b1;
+        exception_code = CAUSE_BREAKPOINT;
+      end else if (misaligned_load) begin
+        exception      = 1'b1;
+        exception_code = CAUSE_MISALIGNED_LOAD;
+      end else if (misaligned_store) begin
+        exception      = 1'b1;
+        exception_code = CAUSE_MISALIGNED_STORE;
+      end
+    end else begin
+      exception      = 1'b0;
+      exception_code = 4'd0;
+    end
+
+    if (exception) begin
+      weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
+      weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
+      d_we = 1'b0;
+      csr_write_en = 1'b0;
+      halt = 1'b0;
+      next_pc = pc;
     end
   end
 
   // ------------------- State update -------------------
+  wire exception_pending = exception;
+
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
       pc <= 48'd0;
@@ -498,36 +601,47 @@ module cpu_ad48 #(
       csr_cycle   <= 48'd0;
       csr_instret <= 48'd0;
     end else begin
-      pc <= next_pc;
+      if (exception_pending) begin
+        pc <= TRAP_VECTOR;
+      end else begin
+        pc <= next_pc;
+      end
 
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
+      if (exception_pending) begin
+        priv_mode  <= PRIV_MACHINE;
+        csr_status <= {csr_status[47:2], PRIV_MACHINE};
+      end else if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
         priv_mode  <= csr_write_value[1:0];
         csr_status <= {csr_write_value[47:2], csr_write_value[1:0]};
       end else begin
         csr_status[1:0] <= priv_mode;
       end
 
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
+      if (!exception_pending && csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
         csr_scratch <= csr_write_value;
       end
 
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_EPC)) begin
-        csr_epc <= csr_write_value;
+      if (exception_pending) begin
+        csr_epc   <= pc;
+        csr_cause <= {44'd0, exception_code};
+      end else begin
+        if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_EPC)) begin
+          csr_epc <= csr_write_value;
+        end
+        if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CAUSE)) begin
+          csr_cause <= csr_write_value;
+        end
       end
 
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CAUSE)) begin
-        csr_cause <= csr_write_value;
-      end
-
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CYCLE)) begin
+      if (csr_write_en && !csr_illegal && !exception_pending && (csr_addr_sel == CSR_CYCLE)) begin
         csr_cycle <= csr_write_value;
       end else begin
         csr_cycle <= csr_cycle + 48'd1;
       end
 
-      if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_INSTRET)) begin
+      if (csr_write_en && !csr_illegal && !exception_pending && (csr_addr_sel == CSR_INSTRET)) begin
         csr_instret <= csr_write_value;
-      end else if (!halt) begin
+      end else if (!halt && !exception_pending) begin
         csr_instret <= csr_instret + 48'd1;
       end
     end

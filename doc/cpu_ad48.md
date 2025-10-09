@@ -16,7 +16,7 @@ The intent is to keep timing simple (one instruction per cycle, aside from a HAL
 - **Execute/memory**: A shared ALU handles arithmetic/logic, immediate execution, address formation for loads/stores, and branch condition evaluation. Memory access paths route through `simple_mem48` instances for DMEM (`src/rtl/mem48.v`).
 - **Writeback**: Register bank write enables and destinations are computed per instruction. LDs always target the D bank; other instructions can steer results to either bank via `rdBank`.
 - **Control flow**: Branches, JAL, and JALR compute next PC values combinationally. JAL/JALR use `PC+1` as the link value to keep word addressing consistent.
-- **System**: HALT holds the PC and raises an internal `halt` flag observed by testbenches. Non-HALT SYS encodings behave as NOP today.
+- **System**: `SYS 0` acts as a NOP, `SYS 1` raises a breakpoint exception, and `SYS 0xF` halts the core by holding the PC and asserting the internal `halt` flag. All other encodings trap as illegal instructions.
 - **CSR file**: Status, scratch, EPC/CAUSE, and counter CSRs live alongside the datapath. CSR instructions apply privilege checks, update counters automatically, and keep the architectural `STATUS` view in sync with the internal `priv_mode`.
 
 Timing remains single-cycle: all combinational work completes between clock edges, and the registered PC advances every cycle except during reset or HALT. There is no pipeline and thus no hazard management logic.
@@ -46,7 +46,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 | `JAL` | `0110`        | Link to specified bank/register; target is `PC+1+off`. |
 | `JALR`| `0111`        | Indirect jump via A-bank plus immediate; optional link. |
 | `CSR` | `1000`        | Access machine CSRs (`csr.r`, `csr.rw`, `csr.rs`, `csr.rc`). |
-| `SYS` | `1111`        | `funct=0` NOP, `funct=15` HALT (holds PC). |
+| `SYS` | `1111`        | `funct=0` NOP, `funct=1` breakpoint exception, `funct=15` HALT (holds PC), others illegal. |
 
 ### ALU Operations
 - Implemented in `src/rtl/alu.v` with opcode nibble mapping to 6-bit `alu_op`.
@@ -75,13 +75,20 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - Implemented CSRs:
   - `0x000 STATUS` — machine status flags; bits `[1:0]` mirror `priv_mode`.
   - `0x001 SCRATCH` — general-purpose machine scratch register.
-  - `0x002 EPC` and `0x003 CAUSE` — placeholders for future trap plumbing.
+  - `0x002 EPC` — latched PC of the most recent synchronous exception; `0x003 CAUSE` — cause code (low nibble: `2`=illegal instruction, `3`=breakpoint, `4`=load misaligned, `6`=store misaligned).
   - `0xC00 CYCLE` — free-running cycle counter.
   - `0xC01 INSTRET` — retired-instruction counter.
 
+### Synchronous Exceptions & Trap Entry
+- The core recognises three synchronous exceptions in `v0.2`: illegal instruction decodes, software breakpoints (`SYS 1`), and misaligned data accesses (load/store addresses that overflow or underflow the configured DMEM range).
+- When an exception occurs, register writes, DMEM writes, and CSR side-effects for the faulting instruction are suppressed. `csr_epc` captures the PC of the trapped instruction and `csr_cause` records the cause code listed above.
+- `csr_instret` does not increment for the faulting instruction, ensuring software-visible retirement counts stay precise.
+- The machine privilege level is asserted (`priv_mode <= 3`) and `STATUS[1:0]` mirrors the change automatically.
+- Execution resumes at `TRAP_VECTOR` (default `64`). Populate this address in IMEM with a trap handler or `halt` sequence as appropriate for your environment.
+
 ## Module Breakdown
 
-- **`src/rtl/cpu_ad48.v`**: Top-level CPU tying together fetch, decode, execute, memory, and control logic. Parameters `IM_WORDS`/`DM_WORDS` set instruction/data memory depth.
+- **`src/rtl/cpu_ad48.v`**: Top-level CPU tying together fetch, decode, execute, memory, and control logic. Parameters `IM_WORDS`/`DM_WORDS` set instruction/data memory depth; `TRAP_VECTOR` selects the synchronous exception handler PC (default `64`).
 - **`src/rtl/cpu_ad48_instr.vh`**: Shared opcode constants and helper functions for assembling instructions (used by RTL and verification).
 - **`src/rtl/alu.v`**: 48-bit ALU implementation with comparator outputs used for branch decisions.
 - **`src/rtl/regfiles.v`**: Two 8x48 register banks with synchronous write ports.
@@ -97,6 +104,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - **`verif/env/cpu_ad48_alu_tb.v`**: Exercises ALU paths, swap behavior, and basic immediate handling. Confirms writes to `A0` are suppressed.
 - **`verif/env/cpu_ad48_ctrl_tb.v`**: Covers branch conditions, JAL/JALR linking, loop control, and HALT behavior.
 - **`verif/env/cpu_ad48_mem_tb.v`**: Validates load/store displacement, post-increment sequencing, and DMEM updates.
+- **`verif/env/cpu_ad48_exc_tb.v`**: Checks synchronous exception entry, cause/EPC reporting, and precise retirement counts for illegal, breakpoint, and misaligned accesses.
 
 Each testbench uses the instruction helper functions to compose programs directly into IMEM, then monitors register/memory state via hierarchical references. Running all three provides baseline functional confidence; waveform inspection is optional thanks to self-checking tasks.
 
