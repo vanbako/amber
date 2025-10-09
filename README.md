@@ -17,11 +17,11 @@ Amber is an experimental 48-bit RISC processor core and SoC playground aimed at 
 The milestone plan with ordered feature work is tracked in `doc/roadmap.md`. Each release layers OS-critical functionality such as trap handling, privilege separation, virtual memory, and I/O subsystems.
 
 ## Repository Layout
-- `src/` — RTL for the CPU core, ALU, register files, on-chip memories, and SoC stubs.
-- `doc/` — Architecture guides, assembler/toolchain notes, and the roadmap.
-- `verif/` — Testbenches and verification infrastructure.
-- `tools/` — Assembly, build, and simulation helpers.
-- `build/`, `obj_dir/` — Generated artifacts from simulations or synthesis flows.
+- `src/` - RTL for the CPU core, ALU, register files, on-chip memories, and SoC stubs.
+- `doc/` - Architecture guides, assembler/toolchain notes, and the roadmap.
+- `verif/` - Testbenches and verification infrastructure.
+- `tools/` - Assembly, build, and simulation helpers.
+- `build/`, `obj_dir/` - Generated artifacts from simulations or synthesis flows.
 
 ## Getting Started
 1. Review `doc/cpu_ad48.md` for architectural details and instruction formats.
@@ -32,4 +32,3 @@ The milestone plan with ordered feature work is tracked in `doc/roadmap.md`. Eac
 - Start with the `doc/roadmap.md` milestones to prioritize upcoming work.
 - Keep RTL and documentation updates in sync; new features should arrive with verification coverage.
 - Discussions, design notes, and experiment logs can live under `doc/` for future reference.
-

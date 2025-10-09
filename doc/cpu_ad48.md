@@ -10,10 +10,10 @@
 The intent is to keep timing simple (one instruction per cycle, aside from a HALT hold) while leaving hooks for future features like variable-latency memories or extended opcodes.
 
 ## Microarchitecture
-- **Fetch stage**: PC indexes `IMEM` (`src/rtl/cpu_ad48.v` lines 24-42). `PC` is 48 bits wide but only the least significant bits required for the configured memory depth participate in the array lookup.
-- **Decode stage**: Combinational decode unpacks opcode class, register indices, funct/subop fields, branch conditions, and immediates (`cpu_ad48.v` lines 44-121).
+- **Fetch stage**: `pc` indexes instruction memory inside `src/rtl/cpu_ad48.v`. The register holds a 48-bit word address and only the low bits required for the configured memory depth feed the memory instance.
+- **Decode stage**: The same module performs a combinational decode of opcode class, register indices, funct/subop fields, branch conditions, and immediates.
 - **Register access**: `regfileA`/`regfileD` modules provide single-read/single-write ports clocked on the rising edge (`src/rtl/regfiles.v`). `A0` ignores writes and always reads as zero to simplify base+offset addressing.
-- **Execute/memory**: A shared ALU handles arithmetic/logic, immediate execution, address formation for loads/stores, and branch condition evaluation. Memory access paths route through `simple_mem48` instances for DMEM (`cpu_ad48.v` lines 198-228).
+- **Execute/memory**: A shared ALU handles arithmetic/logic, immediate execution, address formation for loads/stores, and branch condition evaluation. Memory access paths route through `simple_mem48` instances for DMEM (`src/rtl/mem48.v`).
 - **Writeback**: Register bank write enables and destinations are computed per instruction. LDs always target the D bank; other instructions can steer results to either bank via `rdBank`.
 - **Control flow**: Branches, JAL, and JALR compute next PC values combinationally. JAL/JALR use `PC+1` as the link value to keep word addressing consistent.
 - **System**: HALT holds the PC and raises an internal `halt` flag observed by testbenches. Non-HALT SYS encodings behave as NOP today.
@@ -66,7 +66,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - **`src/rtl/cpu_ad48.v`**: Top-level CPU tying together fetch, decode, execute, memory, and control logic. Parameters `IM_WORDS`/`DM_WORDS` set instruction/data memory depth.
 - **`src/rtl/cpu_ad48_instr.vh`**: Shared opcode constants and helper functions for assembling instructions (used by RTL and verification).
 - **`src/rtl/alu.v`**: 48-bit ALU implementation with comparator outputs used for branch decisions.
-- **`src/rtl/regfiles.v`**: Two 8×48 register banks with synchronous write ports.
+- **`src/rtl/regfiles.v`**: Two 8x48 register banks with synchronous write ports.
 - **`src/rtl/mem48.v`**: Synchronous write / combinational read memory; instantiated twice for IMEM and DMEM.
 - **`src/rtl/simple_soc_stub.v`**: Convenience wrapper around the CPU for integration or `$readmemh` preload hooks.
 
@@ -87,4 +87,3 @@ Each testbench uses the instruction helper functions to compose programs directl
 - To connect external memories, replace `simple_mem48` with vendor-specific blocks or expose ports at the top level (consider updating the SoC stub).
 - Additional instructions can reuse the existing decode scaffolding: extend `cpu_ad48_instr.vh`, map new opcodes in the `case (op)` statement, and route operands through the ALU or bespoke datapaths.
 - For multi-cycle operations or stalls, introduce pipeline registers around the execute/memory section and gate `next_pc` updates accordingly; the single-cycle baseline simplifies this evolution.
-

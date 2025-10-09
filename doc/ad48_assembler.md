@@ -3,7 +3,7 @@
 This Python tool translates human-readable AD48 assembly into 48-bit machine
 code suitable for `$readmemh` or simulation preload.  The assembler lives in
 `tools/ad48_asm.py` and is intentionally dependency-free so it can run on
-Python 3.9+ out of the box.
+Python 3.9+ out of the box.
 
 ## Usage
 
@@ -76,7 +76,7 @@ assembler or manifest format.
 - **Mnemonics:** lower-case keywords (`copy`, `add`, `subtract`, `load`,
   `store`, `branch`, `jump`, `halt`, `nop`, `system`).  Suffixes follow the
   mnemonic (e.g. `branch.eq`, `branch.gt.u`, `jump.ind`).
-- **Registers:** `a0`–`a7` and `d0`–`d7`.  The assembler enforces the same bank
+- **Registers:** `a0`-`a7` and `d0`-`d7`.  The assembler enforces the same bank
   restrictions as the RTL (e.g. loads always target `d` registers, branch
   compares are `A` vs `D`).
 - **Immediates & Expressions:** accept decimal, hex (`0x`), binary (`0b`), and
@@ -85,9 +85,9 @@ assembler or manifest format.
 - **Labels:** any identifier followed by `:`.  Multiple labels on a line are
   allowed.
 - **Directives:**
-  - `.equ NAME, expr` — define a constant (can also use `NAME: .equ expr`).
-  - `.org expr` — move the program counter (useful for placing data blocks).
-  - `.word expr, ...` — emit literal 48-bit words.
+  - `.equ NAME, expr` - define a constant (can also use `NAME: .equ expr`).
+  - `.org expr` - move the program counter (useful for placing data blocks).
+  - `.word expr, ...` - emit literal 48-bit words.
 
 ## Macro System
 
@@ -167,4 +167,4 @@ which can be fed straight into the AD48 testbenches or ROM initialisation.
 
 - Pseudo-ops for structure layout (e.g. `.align`, `.space`).
 - Optional listing output with mixed source/hex.
-- Integration with a higher-level toolchain (assembler → linker → ROM image).
+- Integration with a higher-level toolchain (assembler -> linker -> ROM image).
