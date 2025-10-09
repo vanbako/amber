@@ -93,6 +93,10 @@ module cpu_ad48 #(
   input  clk,
   input  resetn
 );
+  // Reset include guard so compile order doesn't drop instruction constants.
+`ifdef CPU_AD48_INSTR_VH
+`undef CPU_AD48_INSTR_VH
+`endif
   `include "cpu_ad48_instr.vh"
 
   // Opcode, funct, and branch encodings are provided by cpu_ad48_instr.vh.

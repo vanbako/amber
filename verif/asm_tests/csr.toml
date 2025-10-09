@@ -1,0 +1,15 @@
+[program]
+name = "csr"
+format = "memh"
+output = "../../build/asm_tests/csr.memh"
+listing = "../../build/asm_tests/csr.lst"
+imem_output = "../../build/asm_tests/csr.memh"
+
+[[segment]]
+label = "csr"
+source = "csr.asm"
+
+[[backend]]
+type = "simulation"
+name = "csr-sim"
+max_cycles = 1024
