@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 // A-bank: 8 x 48, index 0 hard-wired to zero (reads as 0, writes ignored).
 module regfileA(
   input              clk,

@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 // ============================================================================
 //  A/D bank minimal 48-bit CPU (single-cycle)
 //  - A bank (8 regs): A0 hard-wired 0; typically used for addresses/bases
@@ -83,25 +85,9 @@ module cpu_ad48 #(
   input  clk,
   input  resetn
 );
-  // ------------------- opcodes & subops -------------------
-  localparam OP_ALU    = 8'h00;
-  localparam OP_ALUI_A = 8'h01;
-  localparam OP_ALUI_D = 8'h02;
-  localparam OP_LD     = 8'h03;
-  localparam OP_ST     = 8'h04;
-  localparam OP_BR     = 8'h05;
-  localparam OP_JAL    = 8'h06;
-  localparam OP_JALR   = 8'h07;
-  localparam OP_SYS    = 8'h3F;
+  `include "cpu_ad48_instr.vh"
 
-  // ALU funct / subop (shared)
-  localparam F_ADD = 4'h0, F_SUB = 4'h1, F_AND = 4'h2, F_OR  = 4'h3;
-  localparam F_XOR = 4'h4, F_SLL = 4'h5, F_SRL = 4'h6, F_SRA = 4'h7;
-  localparam F_NOT = 4'h8;
-
-  // branch cond
-  localparam C_BEQ=3'b000, C_BNE=3'b001, C_BLT=3'b010, C_BLTU=3'b011;
-  localparam C_BGE=3'b100, C_BGEU=3'b101, C_ALWAYS=3'b111;
+  // Opcode, funct, and branch encodings are provided by cpu_ad48_instr.vh.
 
   // ------------------- PC & IMEM -------------------
   reg  [47:0] pc;

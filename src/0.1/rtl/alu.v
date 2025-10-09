@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 // 48-bit ALU, minimal ops.
 // Non-commutatives assume operands as (A op D). For commutatives, a 'swap' bit
 // lets control flip inputs without extra datapaths in the regfiles.

@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 // Simple 48-bit word memory with synchronous write / combinational read.
 module simple_mem48 #(
   parameter WORDS = 16384

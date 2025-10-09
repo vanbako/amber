@@ -1,5 +1,7 @@
 `timescale 1ns/1ps
-`include "cpu_ad48_instr.vh"
+`ifdef CPU_AD48_INSTR_VH
+`undef CPU_AD48_INSTR_VH
+`endif
 
 module cpu_ad48_alu_tb;
   localparam IM_WORDS = 64;
@@ -15,6 +17,8 @@ module cpu_ad48_alu_tb;
     .clk   (clk),
     .resetn(resetn)
   );
+
+  `include "../../../src/0.1/rtl/cpu_ad48_instr.vh"
 
   initial begin
     clk = 1'b0;
