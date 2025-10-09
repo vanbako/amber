@@ -487,7 +487,7 @@ module cpu_ad48 #(
         endcase
 
         csr_valid_access = csr_known && (priv_mode >= csr_required_priv);
-        csr_illegal      = ~csr_valid_access;
+        csr_illegal      = csr_known && !csr_valid_access;
 
         case (op_ext)
           CSR_F_RW: begin
