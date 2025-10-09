@@ -122,6 +122,7 @@ module cpu_ad48 #(
   wire [2:0]  rdIdx   = instr[38:36];
   wire [2:0]  rsA     = instr[35:33];
   wire [2:0]  rsD     = instr[32:30];
+  wire [2:0]  rsD_im  = instr[35:33]; // ALUI_D source selector
   wire [3:0]  funct   = instr[29:26];
   wire        swap    = instr[25];
 
@@ -173,9 +174,15 @@ module cpu_ad48 #(
     .waddr(wA_idx),
     .wdata(wA_data)
   );
+  wire [2:0] d_raddr =
+    (op==OP_BR)     ? br_rsD  :
+    (op==OP_ST)     ? st_rsD  :
+    (op==OP_ALUI_D) ? rsD_im  :
+                      rsD;
+
   regfileD RF_D(
     .clk(clk),
-    .raddr((op==OP_BR) ? br_rsD : rsD),
+    .raddr(d_raddr),
     .rdata(rD),
     .we(weD),
     .waddr(wD_idx),
@@ -218,41 +225,28 @@ module cpu_ad48 #(
   reg [47:0] next_pc;
   reg        halt;
 
-  // default writeback routing
+  // Main decode
   always @* begin
+    // defaults
     weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
     weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
-  end
 
-  // ALU default wiring
-  always @* begin
-    // default: use rsA, rsD; swap optionally for commutatives ONLY (AND/OR/XOR/ADD)
-    // We still allow swap bit to route D->A input and A->D input logically.
-    // Control will only set swap for commutatives.
+    // default ALU wiring: use rsA, rsD; swap for commutatives when requested
     alu_a = swap ? rD : rA;
     alu_b = swap ? rA : rD;
     alu_op = 6'h00;
     shamt = 6'd0;
-  end
 
-  // Memory defaults
-  always @* begin
+    // memory defaults
     d_we   = 1'b0;
     d_addr = '0;
-  end
 
-  // Next PC default
-  always @* begin
+    // next PC defaults
     next_pc = pc + 48'd1;
     halt    = 1'b0;
-  end
 
-  // Main decode
-  always @* begin
-    // start from defaults
-    // (Signals already defaulted above)
-
-    case (op)
+    if (resetn) begin
+      case (op)
       OP_ALU: begin
         // Map funct to ALU op
         case (funct)
@@ -399,7 +393,8 @@ module cpu_ad48 #(
       end
 
       default: ; // NOP
-    endcase
+      endcase
+    end
   end
 
   // ------------------- State update -------------------

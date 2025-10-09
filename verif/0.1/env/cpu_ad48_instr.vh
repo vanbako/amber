@@ -40,7 +40,7 @@ function [47:0] instr_alu;
   input  [3:0]  funct;
   input         swap;
   begin
-    instr_alu = {OP_ALU, rdBank[0], rdIdx, rsA, rsD, funct, swap[0], 25'd0};
+    instr_alu = {OP_ALU, rdBank, rdIdx, rsA, rsD, funct, swap, 25'd0};
   end
 endfunction
 
@@ -51,7 +51,7 @@ function [47:0] instr_alui_a;
   input  [5:0]  subop;
   input  [26:0] imm27;
   begin
-    instr_alui_a = {OP_ALUI_A, rdBank[0], rdIdx, rsA, subop, imm27};
+    instr_alui_a = {OP_ALUI_A, rdBank, rdIdx, rsA, subop, imm27};
   end
 endfunction
 
@@ -62,7 +62,7 @@ function [47:0] instr_alui_d;
   input  [5:0]  subop;
   input  [26:0] imm27;
   begin
-    instr_alui_d = {OP_ALUI_D, rdBank[0], rdIdx, rsD, subop, imm27};
+    instr_alui_d = {OP_ALUI_D, rdBank, rdIdx, rsD, subop, imm27};
   end
 endfunction
 
@@ -72,7 +72,7 @@ function [47:0] instr_ld;
   input  [2:0]  baseA;
   input  [32:0] disp33;
   begin
-    instr_ld = {OP_LD, postinc[0], rdD, baseA, disp33};
+    instr_ld = {OP_LD, postinc, rdD, baseA, disp33};
   end
 endfunction
 
@@ -82,7 +82,7 @@ function [47:0] instr_st;
   input  [2:0]  baseA;
   input  [32:0] disp33;
   begin
-    instr_st = {OP_ST, postinc[0], rsD, baseA, disp33};
+    instr_st = {OP_ST, postinc, rsD, baseA, disp33};
   end
 endfunction
 
@@ -101,7 +101,7 @@ function [47:0] instr_jal;
   input  [2:0]  rdIdx;
   input  [35:0] off36;
   begin
-    instr_jal = {OP_JAL, rdBank[0], rdIdx, off36};
+    instr_jal = {OP_JAL, rdBank, rdIdx, off36};
   end
 endfunction
 
@@ -111,7 +111,7 @@ function [47:0] instr_jalr;
   input  [2:0]  rsA;
   input  [32:0] imm33;
   begin
-    instr_jalr = {OP_JALR, rdBank[0], rdIdx, rsA, imm33};
+    instr_jalr = {OP_JALR, rdBank, rdIdx, rsA, imm33};
   end
 endfunction
 
