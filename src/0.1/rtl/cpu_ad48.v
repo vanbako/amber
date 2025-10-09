@@ -9,17 +9,19 @@
 //
 // Instruction formats (all 48-bit, fields MSB..LSB):
 // 1) ALU (A×D -> rd):
-//    [47:40]=OP_ALU
+//    [47:44]=OP_ALU (opcode class)
+//    [43:40]=funct (lower nibble of opcode)
 //    [39]   = rdBank (0=A, 1=D)
 //    [38:36]= rdIdx
 //    [35:33]= rsA
 //    [32:30]= rsD
-//    [29:26]= funct
-//    [25]   = swap (for commutatives; when 1, inputs seen as D,A)
-//    [24:0] = 0
+//    [29]   = swap (for commutatives; when 1, inputs seen as D,A)
+//    [28:24]= reserved (0 for now)
+//    [23:0] = 0
 //
 // 2) ALU-IMM A:
-//    [47:40]=OP_ALUI_A
+//    [47:44]=OP_ALUI_A
+//    [43:40]=0 (reserved for extended opcode)
 //    [39]   = rdBank
 //    [38:36]= rdIdx
 //    [35:33]= rsA
@@ -27,7 +29,8 @@
 //    [26:0] = imm27 (sign-extended to 48; shamt uses imm[5:0])
 //
 // 3) ALU-IMM D:
-//    [47:40]=OP_ALUI_D
+//    [47:44]=OP_ALUI_D
+//    [43:40]=0
 //    [39]   = rdBank
 //    [38:36]= rdIdx
 //    [35:33]= rsD
@@ -35,42 +38,47 @@
 //    [26:0] = imm27
 //
 // 4) LOAD  (LD dDst, disp(aBase)[+]):  (writes to D only)
-//    [47:40]=OP_LD
+//    [47:44]=OP_LD
+//    [43:40]=0
 //    [39]   = post_inc (1=write back aBase+=disp; ignored if aBase==A0)
 //    [38:36]= rdD
 //    [35:33]= rsA
 //    [32:0] = disp33 (sign-extended, word units)
 //
 // 5) STORE (ST dSrc, disp(aBase)[+]):
-//    [47:40]=OP_ST
+//    [47:44]=OP_ST
+//    [43:40]=0
 //    [39]   = post_inc
 //    [38:36]= rsD
 //    [35:33]= rsA
 //    [32:0] = disp33
 //
 // 6) BRANCH (PC-relative, word units; compares A vs D):
-//    [47:40]=OP_BR
+//    [47:44]=OP_BR
+//    [43:40]=0
 //    [39:37]= cond (000=BEQ,001=BNE,010=BLT,011=BLTU,100=BGE,101=BGEU,111=ALWAYS)
 //    [36:34]= rsA
 //    [33:31]= rsD
 //    [30:0] = off31 (sign-extended)
 //
 // 7) JAL (rd ← PC+1; PC ← PC+1+off):
-//    [47:40]=OP_JAL
+//    [47:44]=OP_JAL
+//    [43:40]=0
 //    [39]   = rdBank
 //    [38:36]= rdIdx
 //    [35:0] = off36 (sign-extended)
 //
 // 8) JALR (target = aBase + imm; link writes to rd):
-//    [47:40]=OP_JALR
+//    [47:44]=OP_JALR
+//    [43:40]=0
 //    [39]   = rdBank
 //    [38:36]= rdIdx
 //    [35:33]= rsA
 //    [32:0] = imm33 (sign-extended)
 //
 // 9) SYS (HALT/NOP):
-//    [47:40]=OP_SYS
-//    [39:36]= funct (0=NOP, 15=HALT)
+//    [47:44]=OP_SYS
+//    [43:40]= funct (0=NOP, 15=HALT)
 //
 // Notes:
 //  - All immediates/offsets are SIGN-extended to 48 bits.
@@ -101,7 +109,8 @@ module cpu_ad48 #(
   );
 
   // ------------------- Decode common fields -------------------
-  wire [7:0]  op      = instr[47:40];
+  wire [3:0]  op      = instr[47:44];
+  wire [3:0]  op_ext  = instr[43:40];
 
   // ALU
   wire        rdBankA = (instr[39]==1'b0);
@@ -109,8 +118,7 @@ module cpu_ad48 #(
   wire [2:0]  rsA     = instr[35:33];
   wire [2:0]  rsD     = instr[32:30];
   wire [2:0]  rsD_im  = instr[35:33]; // ALUI_D source selector
-  wire [3:0]  funct   = instr[29:26];
-  wire        swap    = instr[25];
+  wire        swap    = (op == OP_ALU) ? instr[29] : 1'b0;
 
   // ALUI_A / ALUI_D
   wire [5:0]  subop   = instr[32:27];
@@ -234,8 +242,8 @@ module cpu_ad48 #(
     if (resetn) begin
       case (op)
       OP_ALU: begin
-        // Map funct to ALU op
-        case (funct)
+        // Map extended opcode nibble to ALU op
+        case (op_ext)
           F_ADD: alu_op = 6'h00;
           F_SUB: alu_op = 6'h01;
           F_AND: alu_op = 6'h02;
@@ -371,8 +379,8 @@ module cpu_ad48 #(
       end
 
       OP_SYS: begin
-        // funct in [39:36]
-        if (instr[39:36] == 4'hF) begin
+        // funct encoded in opcode lower nibble
+        if (op_ext == 4'hF) begin
           halt = 1'b1; next_pc = pc; // hold PC
         end
         // else NOP

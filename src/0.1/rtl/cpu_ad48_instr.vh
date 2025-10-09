@@ -1,16 +1,16 @@
 `ifndef CPU_AD48_INSTR_VH
 `define CPU_AD48_INSTR_VH
 
-// Opcode map
-localparam [7:0] OP_ALU    = 8'h00;
-localparam [7:0] OP_ALUI_A = 8'h01;
-localparam [7:0] OP_ALUI_D = 8'h02;
-localparam [7:0] OP_LD     = 8'h03;
-localparam [7:0] OP_ST     = 8'h04;
-localparam [7:0] OP_BR     = 8'h05;
-localparam [7:0] OP_JAL    = 8'h06;
-localparam [7:0] OP_JALR   = 8'h07;
-localparam [7:0] OP_SYS    = 8'h3F;
+// Opcode map (upper nibble selects the instruction class, lower nibble extends the opcode)
+localparam [3:0] OP_ALU    = 4'h0;
+localparam [3:0] OP_ALUI_A = 4'h1;
+localparam [3:0] OP_ALUI_D = 4'h2;
+localparam [3:0] OP_LD     = 4'h3;
+localparam [3:0] OP_ST     = 4'h4;
+localparam [3:0] OP_BR     = 4'h5;
+localparam [3:0] OP_JAL    = 4'h6;
+localparam [3:0] OP_JALR   = 4'h7;
+localparam [3:0] OP_SYS    = 4'hF;
 
 // ALU funct / subop encodings
 localparam [3:0] F_ADD = 4'h0;
@@ -40,7 +40,8 @@ function [47:0] instr_alu;
   input  [3:0]  funct;
   input         swap;
   begin
-    instr_alu = {OP_ALU, rdBank, rdIdx, rsA, rsD, funct, swap, 25'd0};
+    // Pack the frequently-used ALU format into the upper 24 bits to allow 24-bit slots later on.
+    instr_alu = {OP_ALU, funct, rdBank, rdIdx, rsA, rsD, swap, 5'd0, 24'd0};
   end
 endfunction
 
@@ -51,7 +52,7 @@ function [47:0] instr_alui_a;
   input  [5:0]  subop;
   input  [26:0] imm27;
   begin
-    instr_alui_a = {OP_ALUI_A, rdBank, rdIdx, rsA, subop, imm27};
+    instr_alui_a = {OP_ALUI_A, 4'd0, rdBank, rdIdx, rsA, subop, imm27};
   end
 endfunction
 
@@ -62,7 +63,7 @@ function [47:0] instr_alui_d;
   input  [5:0]  subop;
   input  [26:0] imm27;
   begin
-    instr_alui_d = {OP_ALUI_D, rdBank, rdIdx, rsD, subop, imm27};
+    instr_alui_d = {OP_ALUI_D, 4'd0, rdBank, rdIdx, rsD, subop, imm27};
   end
 endfunction
 
@@ -72,7 +73,7 @@ function [47:0] instr_ld;
   input  [2:0]  baseA;
   input  [32:0] disp33;
   begin
-    instr_ld = {OP_LD, postinc, rdD, baseA, disp33};
+    instr_ld = {OP_LD, 4'd0, postinc, rdD, baseA, disp33};
   end
 endfunction
 
@@ -82,7 +83,7 @@ function [47:0] instr_st;
   input  [2:0]  baseA;
   input  [32:0] disp33;
   begin
-    instr_st = {OP_ST, postinc, rsD, baseA, disp33};
+    instr_st = {OP_ST, 4'd0, postinc, rsD, baseA, disp33};
   end
 endfunction
 
@@ -92,7 +93,7 @@ function [47:0] instr_br;
   input  [2:0]  rsD;
   input  [30:0] off31;
   begin
-    instr_br = {OP_BR, cond, rsA, rsD, off31};
+    instr_br = {OP_BR, 4'd0, cond, rsA, rsD, off31};
   end
 endfunction
 
@@ -101,7 +102,7 @@ function [47:0] instr_jal;
   input  [2:0]  rdIdx;
   input  [35:0] off36;
   begin
-    instr_jal = {OP_JAL, rdBank, rdIdx, off36};
+    instr_jal = {OP_JAL, 4'd0, rdBank, rdIdx, off36};
   end
 endfunction
 
@@ -111,14 +112,14 @@ function [47:0] instr_jalr;
   input  [2:0]  rsA;
   input  [32:0] imm33;
   begin
-    instr_jalr = {OP_JALR, rdBank, rdIdx, rsA, imm33};
+    instr_jalr = {OP_JALR, 4'd0, rdBank, rdIdx, rsA, imm33};
   end
 endfunction
 
 function [47:0] instr_sys;
   input  [3:0]  funct;
   begin
-    instr_sys = {OP_SYS, funct, 36'd0};
+    instr_sys = {OP_SYS, funct, 40'd0};
   end
 endfunction
 
