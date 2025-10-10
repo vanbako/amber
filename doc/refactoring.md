@@ -2,37 +2,37 @@
 
 This document captures the primary restructuring opportunities inside `src/rtl/cpu_ad48.v`. Each block outlines the motivation, targeted code span, and suggested extraction form (module/function/task).
 
-## Utility Function Consolidation
+## Utility Function Consolidation (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:320-349` and scattered helper logic.
 - **Pain point:** Ad-hoc helpers (e.g., ALU-immediate decode) live inside the core, preventing reuse and cluttering the top-level file.
 - **Action:** Relocate decode tables, sign-extension helpers, and privilege sanitisation into a shared package or include file, preparing for multi-file modularisation.
 
-## Decode Layer Helpers
+## Decode Layer Helpers (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:384-600`
 - **Pain point:** Opcode cases repeat register writeback setup and ALU operand selection logic.
 - **Action:** Introduce helper functions/tasks that accept decoded fields and return structured control bundles (e.g., writeback intents, ALU ops), enabling table-driven decode expansion.
 
-## Branch & Jump Decision Helpers
+## Branch & Jump Decision Helpers (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:558-598`
 - **Pain point:** Branch condition evaluation and jump link writeback logic intertwine with other decode cases.
 - **Action:** Provide small helpers (`branch_take`, `jal_link_write`, `jalr_target_calc`) that encapsulate comparator usage and link semantics, paving the way for pipeline hazard integration.
 
-## Memory Address & Post-Increment Sequencer
+## Memory Address & Post-Increment Sequencer (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:525-555`
 - **Pain point:** Address calculation, DMEM access staging, and optional post-increment updates mix arithmetic with side-effect decisions.
 - **Action:** Extract to a `mem_access_unit` that returns address, write enables, and optional post-update data, simplifying addition of cache/MMU layers.
 
-## Register Bank Write Arbitration
+## Register Bank Write Arbitration (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:517-720`
 - **Pain point:** Decentralised gating for A/D write enables risks conflicts when multiple sources request writes in the same cycle.
 - **Action:** Funnel all write intents through a small arbiter task/module that resolves priority and applies handler overrides (e.g., `handler_active` redirect for `SSP`).
 
-## CSR Access Unit
+## CSR Access Unit (skipped for now, too difficult for codex)
 - **Scope:** `src/rtl/cpu_ad48.v:601-724`
 - **Pain point:** CSR metadata lookup, privilege checks, read muxing, write masking, and side-effect management occupy a large contiguous region.
 - **Action:** Wrap into a dedicated `csr_unit` module/function exposing a narrow interface (`req`, `resp`, `writeback`), centralising CSR semantics for reuse and isolated verification.
 
-## Interrupt Priority Encoder
+## Interrupt Priority Encoder (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:430`
 - **Pain point:** In-line loop searches for the first enabled IRQ, burying policy inside the main control block.
 - **Action:** Extract to an `irq_priority` function/module returning `{found, index}`, making alternative ordering strategies or mask handling pluggable.

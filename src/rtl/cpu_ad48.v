@@ -137,6 +137,7 @@ module cpu_ad48 #(
   localparam integer TIMER_IRQ_BIT = IRQ_LINES;
   localparam integer TOTAL_IRQ_LINES = IRQ_LINES + 1;
   localparam integer IRQ_INDEX_WIDTH = (TOTAL_IRQ_LINES <= 1) ? 1 : $clog2(TOTAL_IRQ_LINES);
+  localparam integer IRQ_PRIORITY_WIDTH = IRQ_INDEX_WIDTH + 1;
   localparam [47:0] TIMER_IRQ_BIT_MASK = (TIMER_IRQ_BIT >= 48) ? 48'd0 : (48'h1 << TIMER_IRQ_BIT);
   localparam [47:0] IRQ_LINE_MASK = (TOTAL_IRQ_LINES >= 48) ? {48{1'b1}} : ((48'h1 << TOTAL_IRQ_LINES) - 1);
   localparam integer STATUS_PREV_MODE_LSB = 2;
@@ -605,16 +606,43 @@ module cpu_ad48 #(
   end
   endtask
 
+  // Encapsulate IRQ selection so different priority policies can be plugged in.
+  function automatic [IRQ_PRIORITY_WIDTH-1:0] cpu_ad48_irq_priority;
+    input [47:0] pending_lines;
+    input [47:0] enable_mask;
+    integer idx;
+    reg found;
+    reg [47:0] masked_lines;
+    reg [IRQ_PRIORITY_WIDTH-1:0] result;
+  begin
+    masked_lines = pending_lines & enable_mask;
+    result = {1'b0, {IRQ_INDEX_WIDTH{1'b0}}};
+    found = 1'b0;
+    for (idx = 0; idx < TOTAL_IRQ_LINES; idx = idx + 1) begin
+      if (!found && masked_lines[idx]) begin
+        result[IRQ_INDEX_WIDTH-1:0] = idx[IRQ_INDEX_WIDTH-1:0];
+        result[IRQ_PRIORITY_WIDTH-1] = 1'b1;
+        found = 1'b1;
+      end
+    end
+    cpu_ad48_irq_priority = result;
+  end
+  endfunction
+
   wire [47:0] irq_external = {{(48-IRQ_LINES){1'b0}}, irq};
   wire        timer_irq_level = (csr_timer_cmp != 48'd0) && (csr_timer >= csr_timer_cmp);
   wire [47:0] irq_timer_mask = timer_irq_level ? TIMER_IRQ_BIT_MASK : 48'd0;
   wire [47:0] irq_signals = irq_external | irq_timer_mask;
   wire [47:0] irq_combined = csr_irq_pending | irq_signals;
-  wire [47:0] irq_serviceable = irq_combined & csr_irq_enable;
   wire        irq_mode_enable =
     (priv_mode == PRIV_MACHINE)    ? status_mie :
     (priv_mode == PRIV_SUPERVISOR) ? status_kie :
                                      status_uie;
+  wire [IRQ_PRIORITY_WIDTH-1:0] irq_priority_info =
+    cpu_ad48_irq_priority(irq_combined, csr_irq_enable);
+  wire        irq_request_valid = irq_priority_info[IRQ_PRIORITY_WIDTH-1];
+  wire [IRQ_INDEX_WIDTH-1:0] irq_request_index =
+    irq_priority_info[IRQ_INDEX_WIDTH-1:0];
 
   // ------------------- Control -------------------
   reg [47:0] next_pc;
@@ -622,8 +650,6 @@ module cpu_ad48 #(
 
   // Main decode
   always @* begin
-    integer idx;
-    integer first_found;
     // defaults
     cpu_ad48_writeback_reset();
     ssp_write_en = 1'b0; ssp_write_data = 48'd0;
@@ -664,15 +690,8 @@ module cpu_ad48 #(
     trap_cause_value = 48'd0;
     trap_epc_value   = pc;
     iret             = 1'b0;
-    first_found      = 0;
-
-    for (idx = 0; idx < TOTAL_IRQ_LINES; idx = idx + 1) begin
-      if (!first_found && irq_serviceable[idx]) begin
-        irq_index = idx[IRQ_INDEX_WIDTH-1:0];
-        first_found = 1;
-      end
-    end
-    if (resetn && (first_found != 0) && irq_mode_enable) begin
+    irq_index        = irq_request_index;
+    if (resetn && irq_request_valid && irq_mode_enable) begin
       interrupt = 1'b1;
     end
 
