@@ -19,6 +19,10 @@ Each milestone below builds toward a protected, multitasking operating system ru
 ## v0.3 - Protected Execution Environment
 - Hardware user/kernel privilege levels and mode bits in the CSR status register.
 - Supervisor stack pointer (`SSP`) and dedicated link register semantics for trap/return.
+- Refactoring
+  1. factor ALU-immediate decode into a helper
+  2. prototype a CSR metadata table
+  3. split the big combinational block into themed sub-blocks or modules once helpers are in place.
 - Capability metadata (bounds/permissions tags) attached to pointer-carrying registers.
 - System call ABI routing through the trap handler with context save/restore helpers.
 
