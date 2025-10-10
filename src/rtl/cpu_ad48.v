@@ -1073,24 +1073,10 @@ module cpu_ad48 #(
   // ------------------- State update -------------------
   wire trap_pending = trap_taken;
 
-  always @(posedge clk or negedge resetn) begin
+  always @(posedge clk or negedge resetn) begin : update_pc_branching
     if (!resetn) begin
-      pc                <= 48'd0;
-      priv_mode         <= PRIV_MACHINE;
-      csr_status        <= 48'd0;
-      csr_scratch       <= 48'd0;
-      csr_epc           <= 48'd0;
-      csr_cause         <= 48'd0;
-      csr_lr            <= 48'd0;
-      csr_ssp           <= 48'd0;
-      csr_cycle         <= 48'd0;
-      csr_instret       <= 48'd0;
-      csr_timer         <= 48'd0;
-      csr_timer_cmp     <= 48'd0;
-      csr_irq_enable    <= 48'd0;
-      csr_irq_pending   <= 48'd0;
-      csr_irq_vector    <= IRQ_VECTOR;
-      handler_active    <= 1'b0;
+      pc             <= 48'd0;
+      handler_active <= 1'b0;
     end else begin
       if (trap_pending) begin
         pc <= trap_vector;
@@ -1103,15 +1089,27 @@ module cpu_ad48 #(
       end else if (iret) begin
         handler_active <= 1'b0;
       end
+    end
+  end
 
+  always @(posedge clk or negedge resetn) begin : update_privilege_status
+    if (!resetn) begin
+      priv_mode   <= PRIV_MACHINE;
+      csr_status  <= 48'd0;
+      csr_scratch <= 48'd0;
+      csr_epc     <= 48'd0;
+      csr_cause   <= 48'd0;
+      csr_lr      <= 48'd0;
+      csr_ssp     <= 48'd0;
+    end else begin
       if (trap_pending) begin
-        priv_mode <= PRIV_MACHINE;
+        priv_mode  <= PRIV_MACHINE;
         csr_status <= cpu_ad48_status_trap_transition(csr_status, priv_mode);
       end else if (iret) begin
-        priv_mode <= cpu_ad48_status_prev_mode(csr_status);
+        priv_mode  <= cpu_ad48_status_prev_mode(csr_status);
         csr_status <= cpu_ad48_status_iret_transition(csr_status);
       end else if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
-        priv_mode <= cpu_ad48_sanitize_priv_mode(csr_write_value[1:0]);
+        priv_mode  <= cpu_ad48_sanitize_priv_mode(csr_write_value[1:0]);
         csr_status <= cpu_ad48_normalize_status_write(
           csr_write_value, cpu_ad48_sanitize_priv_mode(csr_write_value[1:0]));
       end else begin
@@ -1143,6 +1141,19 @@ module cpu_ad48 #(
         end
       end
 
+      if (ssp_write_en) begin
+        csr_ssp <= ssp_write_data;
+      end
+    end
+  end
+
+  always @(posedge clk or negedge resetn) begin : update_counters
+    if (!resetn) begin
+      csr_cycle     <= 48'd0;
+      csr_instret   <= 48'd0;
+      csr_timer     <= 48'd0;
+      csr_timer_cmp <= 48'd0;
+    end else begin
       if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_CYCLE)) begin
         csr_cycle <= csr_write_value;
       end else begin
@@ -1164,7 +1175,15 @@ module cpu_ad48 #(
       if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_TIMER_CMP)) begin
         csr_timer_cmp <= csr_write_value;
       end
+    end
+  end
 
+  always @(posedge clk or negedge resetn) begin : update_irq_state
+    if (!resetn) begin
+      csr_irq_enable  <= 48'd0;
+      csr_irq_pending <= 48'd0;
+      csr_irq_vector  <= IRQ_VECTOR;
+    end else begin
       if (csr_write_en && !csr_illegal && !trap_pending && (csr_addr_sel == CSR_IRQ_ENABLE)) begin
         csr_irq_enable <= (csr_write_value & IRQ_LINE_MASK);
       end else begin
@@ -1176,10 +1195,6 @@ module cpu_ad48 #(
       end
 
       csr_irq_pending <= csr_irq_pending_next;
-
-      if (ssp_write_en) begin
-        csr_ssp <= ssp_write_data;
-      end
     end
   end
 

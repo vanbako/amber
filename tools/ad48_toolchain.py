@@ -34,15 +34,16 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import ad48_asm
 
-
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_SIM_TESTBENCH = REPO_ROOT / "tools" / "sim" / "run_core_tb.v"
+SIM_TESTBENCH_DIR = REPO_ROOT / "tools" / "sim"
+DEFAULT_SIM_TESTBENCH = SIM_TESTBENCH_DIR / "run_core_tb.v"
 DEFAULT_SIM_RTL = [
     REPO_ROOT / "src" / "rtl" / "cpu_ad48.v",
     REPO_ROOT / "src" / "rtl" / "mem_access_unit.v",
     REPO_ROOT / "src" / "rtl" / "alu.v",
     REPO_ROOT / "src" / "rtl" / "regfiles.v",
     REPO_ROOT / "src" / "rtl" / "mem48.v",
+    REPO_ROOT / "src" / "rtl" / "simple_soc_stub.v",
 ]
 DEFAULT_SIM_INCLUDE_DIRS = [REPO_ROOT / "src" / "rtl"]
 
@@ -468,6 +469,18 @@ def _plusarg_path(path: pathlib.Path) -> str:
     return str(path).replace("\\", "/")
 
 
+def _resolve_sim_top_source(top: str) -> pathlib.Path:
+    candidate = SIM_TESTBENCH_DIR / f"{top}.v"
+    if candidate.exists():
+        return candidate
+    if top == DEFAULT_SIM_TESTBENCH.stem and DEFAULT_SIM_TESTBENCH.exists():
+        return DEFAULT_SIM_TESTBENCH
+    raise ToolchainError(
+        f"simulation backend '{top}': unable to locate testbench source '{candidate}'. "
+        "Provide the file via the manifest 'extra_sources' or place it under tools/sim."
+    )
+
+
 def _run_subprocess(cmd: List[str], *, cwd: pathlib.Path) -> None:
     try:
         subprocess.run(cmd, cwd=cwd, check=True)
@@ -483,10 +496,10 @@ def _run_simulation(
     image: Dict[int, int],
     imem_path: pathlib.Path,
 ) -> None:
-    if not DEFAULT_SIM_TESTBENCH.exists():
-        raise ToolchainError(f"simulation testbench missing: {DEFAULT_SIM_TESTBENCH}")
     if imem_path is None:
         raise ToolchainError("simulation requires an instruction memory output file")
+
+    top_source = _resolve_sim_top_source(backend.top)
 
     build_root = program.manifest_dir / "build" / "sim" / backend.name
     build_root.mkdir(parents=True, exist_ok=True)
@@ -509,7 +522,7 @@ def _run_simulation(
     for param, value in params.items():
         compile_cmd.extend(["-P", f"{backend.top}.{param}={value}"])
 
-    sources = [DEFAULT_SIM_TESTBENCH] + DEFAULT_SIM_RTL + backend.extra_sources
+    sources = [top_source] + DEFAULT_SIM_RTL + backend.extra_sources
     seen_sources = []
     for src in sources:
         if src in seen_sources:
@@ -576,6 +589,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=pathlib.Path,
         help="Emit a VCD waveform at the provided path during simulation",
     )
+    parser.add_argument(
+        "--sim-top",
+        help="Override the simulation top-level module (default: run_core_tb)",
+    )
     return parser.parse_args(argv)
 
 
@@ -599,11 +616,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             program.imem_output = args.imem_output.resolve()
 
         sim_backends = [b for b in program.backends if isinstance(b, SimulationSpec)]
+        default_sim_top = DEFAULT_SIM_TESTBENCH.stem
         need_sim_backend = args.run_sim or args.sim_max_cycles is not None or args.sim_vcd is not None
         if need_sim_backend and not sim_backends:
-            sim = SimulationSpec(kind="simulation", name="cli-sim", top="run_core_tb")
+            sim = SimulationSpec(
+                kind="simulation",
+                name="cli-sim",
+                top=args.sim_top or default_sim_top,
+            )
             sim_backends.append(sim)
             program.backends.append(sim)
+        if args.sim_top:
+            for sim in sim_backends:
+                sim.top = args.sim_top
 
         if args.sim_max_cycles is not None:
             if args.sim_max_cycles < 0:

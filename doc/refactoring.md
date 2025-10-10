@@ -47,7 +47,7 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** Exception/interrupt classification and trap vector selection are embedded mid-block, forcing control flow fall-through.
 - **Action:** Create a `trap_sequencer` helper that consumes status flags and returns `{trap_taken, vector, cause, squash_controls}` to keep the parent logic linear.
 
-## Sequential State Updates
+## Sequential State Updates (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:811-925`
 - **Pain point:** The single sequential `always` updates PC, privilege, every CSR, counters, and IRQ bookkeeping, complicating reasoning about ordering.
 - **Action:** Split into themed always blocks or tasks (`update_pc_branching`, `update_privilege_status`, `update_counters`, `update_irq_state`) to isolate dependencies and support future pipelines.
