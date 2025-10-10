@@ -21,29 +21,6 @@ function automatic [7:0] cpu_ad48_decode_alui_subop;
   end
 endfunction
 
-// CSR metadata lookup table.
-function automatic [CSR_META_WIDTH-1:0] cpu_ad48_csr_lookup_meta;
-  input [11:0] addr;
-  begin
-    case (addr)
-      CSR_STATUS:      cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_STATUS,      1'b1, CSR_MASK_STATUS};
-      CSR_SCRATCH:     cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SCRATCH,     1'b0, CSR_MASK_FULL};
-      CSR_EPC:         cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_EPC,         1'b1, CSR_MASK_FULL};
-      CSR_CAUSE:       cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_CAUSE,       1'b0, CSR_MASK_FULL};
-      CSR_LR:          cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_LR,          1'b1, CSR_MASK_FULL};
-      CSR_SSP:         cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SSP,         1'b0, CSR_MASK_FULL};
-      CSR_IRQ_ENABLE:  cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_ENABLE,  1'b0, IRQ_LINE_MASK};
-      CSR_IRQ_PENDING: cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_PENDING, 1'b1, IRQ_LINE_MASK};
-      CSR_IRQ_VECTOR:  cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_VECTOR,  1'b0, CSR_MASK_FULL};
-      CSR_CYCLE:       cpu_ad48_csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_CYCLE,       1'b0, CSR_MASK_FULL};
-      CSR_INSTRET:     cpu_ad48_csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_INSTRET,     1'b0, CSR_MASK_FULL};
-      CSR_TIMER:       cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER,       1'b0, CSR_MASK_FULL};
-      CSR_TIMER_CMP:   cpu_ad48_csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER_CMP,   1'b0, CSR_MASK_FULL};
-      default:         cpu_ad48_csr_lookup_meta = {1'b0, PRIV_MACHINE,    CSR_SEL_ZERO,        1'b0, CSR_MASK_ZERO};
-    endcase
-  end
-endfunction
-
 // Sign-extension helpers for the common immediate widths.
 function automatic [47:0] cpu_ad48_sx_imm27;
   input [26:0] imm;

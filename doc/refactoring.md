@@ -27,7 +27,7 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** Decentralised gating for A/D write enables risks conflicts when multiple sources request writes in the same cycle.
 - **Action:** Funnel all write intents through a small arbiter task/module that resolves priority and applies handler overrides (e.g., `handler_active` redirect for `SSP`).
 
-## CSR Access Unit (skipped for now, too difficult for codex)
+## CSR Access Unit (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:601-724`
 - **Pain point:** CSR metadata lookup, privilege checks, read muxing, write masking, and side-effect management occupy a large contiguous region.
 - **Action:** Wrap into a dedicated `csr_unit` module/function exposing a narrow interface (`req`, `resp`, `writeback`), centralising CSR semantics for reuse and isolated verification.

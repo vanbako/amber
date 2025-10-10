@@ -39,6 +39,7 @@ SIM_TESTBENCH_DIR = REPO_ROOT / "tools" / "sim"
 DEFAULT_SIM_TESTBENCH = SIM_TESTBENCH_DIR / "run_core_tb.v"
 DEFAULT_SIM_RTL = [
     REPO_ROOT / "src" / "rtl" / "cpu_ad48.v",
+    REPO_ROOT / "src" / "rtl" / "csr_unit.v",
     REPO_ROOT / "src" / "rtl" / "mem_access_unit.v",
     REPO_ROOT / "src" / "rtl" / "alu.v",
     REPO_ROOT / "src" / "rtl" / "regfiles.v",
