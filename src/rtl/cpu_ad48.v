@@ -165,6 +165,38 @@ module cpu_ad48 #(
   localparam integer STATUS_KPIE_BIT      = 8;
   localparam integer STATUS_MPIE_BIT      = 9;
 
+  // CSR metadata encodings
+  localparam [47:0] CSR_MASK_ZERO        = 48'd0;
+  localparam [47:0] CSR_MASK_FULL        = {48{1'b1}};
+  localparam [47:0] CSR_MASK_STATUS      = CSR_MASK_FULL;
+  localparam [3:0] CSR_SEL_ZERO       = 4'd0;
+  localparam [3:0] CSR_SEL_STATUS     = 4'd1;
+  localparam [3:0] CSR_SEL_SCRATCH    = 4'd2;
+  localparam [3:0] CSR_SEL_EPC        = 4'd3;
+  localparam [3:0] CSR_SEL_CAUSE      = 4'd4;
+  localparam [3:0] CSR_SEL_LR         = 4'd5;
+  localparam [3:0] CSR_SEL_SSP        = 4'd6;
+  localparam [3:0] CSR_SEL_IRQ_ENABLE = 4'd7;
+  localparam [3:0] CSR_SEL_IRQ_PENDING= 4'd8;
+  localparam [3:0] CSR_SEL_IRQ_VECTOR = 4'd9;
+  localparam [3:0] CSR_SEL_CYCLE      = 4'd10;
+  localparam [3:0] CSR_SEL_INSTRET    = 4'd11;
+  localparam [3:0] CSR_SEL_TIMER      = 4'd12;
+  localparam [3:0] CSR_SEL_TIMER_CMP  = 4'd13;
+
+  localparam integer CSR_META_PRIV_WIDTH    = 2;
+  localparam integer CSR_META_READSEL_WIDTH = 4;
+  localparam integer CSR_META_WRITE_MASK_WIDTH = 48;
+  localparam integer CSR_META_WIDTH         = 1 + CSR_META_PRIV_WIDTH + CSR_META_READSEL_WIDTH + 1 + CSR_META_WRITE_MASK_WIDTH;
+  localparam integer CSR_META_WRITE_MASK_LSB = 0;
+  localparam integer CSR_META_WRITE_MASK_MSB = CSR_META_WRITE_MASK_LSB + CSR_META_WRITE_MASK_WIDTH - 1;
+  localparam integer CSR_META_WRITE_SIDE_BIT = CSR_META_WRITE_MASK_MSB + 1;
+  localparam integer CSR_META_READSEL_LSB   = CSR_META_WRITE_SIDE_BIT + 1;
+  localparam integer CSR_META_READSEL_MSB   = CSR_META_READSEL_LSB + CSR_META_READSEL_WIDTH - 1;
+  localparam integer CSR_META_PRIV_LSB      = CSR_META_READSEL_MSB + 1;
+  localparam integer CSR_META_PRIV_MSB      = CSR_META_PRIV_LSB + CSR_META_PRIV_WIDTH - 1;
+  localparam integer CSR_META_VALID_BIT     = CSR_META_PRIV_MSB + 1;
+
   initial begin
     if (TOTAL_IRQ_LINES > 48) begin
       $fatal(1, "cpu_ad48: TOTAL_IRQ_LINES (%0d) exceeds supported width (48)", TOTAL_IRQ_LINES);
@@ -294,6 +326,28 @@ module cpu_ad48 #(
         F_SRA: decode_alui_subop = {1'b1, 1'b0, 6'h07};
         F_NOT: decode_alui_subop = {1'b1, 1'b1, 6'h08};
         default: decode_alui_subop = {1'b0, 1'b0, 6'h00};
+      endcase
+    end
+  endfunction
+
+  function automatic [CSR_META_WIDTH-1:0] csr_lookup_meta;
+    input [11:0] addr;
+    begin
+      case (addr)
+        CSR_STATUS:      csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_STATUS,      1'b1, CSR_MASK_STATUS};
+        CSR_SCRATCH:     csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SCRATCH,     1'b0, CSR_MASK_FULL};
+        CSR_EPC:         csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_EPC,         1'b1, CSR_MASK_FULL};
+        CSR_CAUSE:       csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_CAUSE,       1'b0, CSR_MASK_FULL};
+        CSR_LR:          csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_LR,          1'b1, CSR_MASK_FULL};
+        CSR_SSP:         csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SSP,         1'b0, CSR_MASK_FULL};
+        CSR_IRQ_ENABLE:  csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_ENABLE,  1'b0, IRQ_LINE_MASK};
+        CSR_IRQ_PENDING: csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_PENDING, 1'b1, IRQ_LINE_MASK};
+        CSR_IRQ_VECTOR:  csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_VECTOR,  1'b0, CSR_MASK_FULL};
+        CSR_CYCLE:       csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_CYCLE,       1'b0, CSR_MASK_FULL};
+        CSR_INSTRET:     csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_INSTRET,     1'b0, CSR_MASK_FULL};
+        CSR_TIMER:       csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER,       1'b0, CSR_MASK_FULL};
+        CSR_TIMER_CMP:   csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER_CMP,   1'b0, CSR_MASK_FULL};
+        default:         csr_lookup_meta = {1'b0, PRIV_MACHINE,    CSR_SEL_ZERO,        1'b0, CSR_MASK_ZERO};
       endcase
     end
   endfunction
@@ -545,80 +599,67 @@ module cpu_ad48 #(
       end
 
       OP_CSR: begin
-        csr_addr_sel      = csr_addr;
-        csr_required_priv = PRIV_MACHINE;
-        csr_known         = 1'b0;
+        reg [CSR_META_WIDTH-1:0]          csr_meta;
+        reg [CSR_META_READSEL_WIDTH-1:0]  csr_read_sel;
+        reg [47:0]                        csr_write_mask;
+        reg [47:0]                        csr_write_operand;
+        reg                               csr_has_side_effect;
+        reg                               csr_write_allowed;
+        csr_addr_sel = csr_addr;
 
-        case (csr_addr)
-          CSR_STATUS: begin
-            csr_read_value   = csr_status;
+        csr_meta          = csr_lookup_meta(csr_addr);
+        csr_known         = csr_meta[CSR_META_VALID_BIT];
+        csr_required_priv = csr_meta[CSR_META_PRIV_MSB:CSR_META_PRIV_LSB];
+        csr_read_sel      = csr_meta[CSR_META_READSEL_MSB:CSR_META_READSEL_LSB];
+        csr_has_side_effect = csr_meta[CSR_META_WRITE_SIDE_BIT];
+        csr_write_mask    = csr_meta[CSR_META_WRITE_MASK_MSB:CSR_META_WRITE_MASK_LSB];
+        csr_write_operand = rD & csr_write_mask;
+        csr_write_allowed = csr_has_side_effect || (csr_write_mask != CSR_MASK_ZERO);
+        csr_read_value    = 48'd0;
+
+        case (csr_read_sel)
+          CSR_SEL_STATUS: begin
+            csr_read_value = csr_status;
             csr_read_value[1:0] = priv_mode;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
           end
-          CSR_SCRATCH: begin
-            csr_read_value   = csr_scratch;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_SCRATCH: begin
+            csr_read_value = csr_scratch;
           end
-          CSR_EPC: begin
-            csr_read_value   = csr_epc;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_EPC: begin
+            csr_read_value = csr_epc;
           end
-          CSR_CAUSE: begin
-            csr_read_value   = csr_cause;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_CAUSE: begin
+            csr_read_value = csr_cause;
           end
-          CSR_LR: begin
-            csr_read_value   = csr_lr;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_LR: begin
+            csr_read_value = csr_lr;
           end
-          CSR_SSP: begin
-            csr_read_value   = csr_ssp;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_SSP: begin
+            csr_read_value = csr_ssp;
           end
-          CSR_IRQ_ENABLE: begin
-            csr_read_value   = csr_irq_enable;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_IRQ_ENABLE: begin
+            csr_read_value = csr_irq_enable;
           end
-          CSR_IRQ_PENDING: begin
-            csr_read_value   = csr_irq_pending;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_IRQ_PENDING: begin
+            csr_read_value = csr_irq_pending;
           end
-          CSR_IRQ_VECTOR: begin
-            csr_read_value   = csr_irq_vector;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_IRQ_VECTOR: begin
+            csr_read_value = csr_irq_vector;
           end
-          CSR_CYCLE: begin
-            csr_read_value   = csr_cycle;
-            csr_required_priv= PRIV_USER;
-            csr_known        = 1'b1;
+          CSR_SEL_CYCLE: begin
+            csr_read_value = csr_cycle;
           end
-          CSR_INSTRET: begin
-            csr_read_value   = csr_instret;
-            csr_required_priv= PRIV_USER;
-            csr_known        = 1'b1;
+          CSR_SEL_INSTRET: begin
+            csr_read_value = csr_instret;
           end
-          CSR_TIMER: begin
-            csr_read_value   = csr_timer;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_TIMER: begin
+            csr_read_value = csr_timer;
           end
-          CSR_TIMER_CMP: begin
-            csr_read_value   = csr_timer_cmp;
-            csr_required_priv= PRIV_SUPERVISOR;
-            csr_known        = 1'b1;
+          CSR_SEL_TIMER_CMP: begin
+            csr_read_value = csr_timer_cmp;
           end
           default: begin
             csr_read_value = 48'd0;
-            csr_known      = 1'b0;
           end
         endcase
 
@@ -628,23 +669,35 @@ module cpu_ad48 #(
         case (op_ext)
           CSR_F_RW: begin
             if (csr_valid_access) begin
-              csr_write_en    = 1'b1;
-              csr_write_value = rD;
-              csr_illegal     = 1'b0;
+              if (csr_write_allowed) begin
+                csr_write_en    = 1'b1;
+                csr_write_value = (csr_read_value & ~csr_write_mask) | csr_write_operand;
+                csr_illegal     = 1'b0;
+              end else begin
+                csr_illegal     = csr_known;
+              end
             end
           end
           CSR_F_RS: begin
-            if (csr_valid_access && (rD != 48'd0)) begin
-              csr_write_en    = 1'b1;
-              csr_write_value = csr_read_value | rD;
-              csr_illegal     = 1'b0;
+            if (csr_valid_access && (csr_write_operand != 48'd0)) begin
+              if (csr_write_allowed) begin
+                csr_write_en    = 1'b1;
+                csr_write_value = csr_read_value | csr_write_operand;
+                csr_illegal     = 1'b0;
+              end else begin
+                csr_illegal     = csr_known;
+              end
             end
           end
           CSR_F_RC: begin
-            if (csr_valid_access && (rD != 48'd0)) begin
-              csr_write_en    = 1'b1;
-              csr_write_value = csr_read_value & ~rD;
-              csr_illegal     = 1'b0;
+            if (csr_valid_access && (csr_write_operand != 48'd0)) begin
+              if (csr_write_allowed) begin
+                csr_write_en    = 1'b1;
+                csr_write_value = csr_read_value & ~csr_write_operand;
+                csr_illegal     = 1'b0;
+              end else begin
+                csr_illegal     = csr_known;
+              end
             end
           end
           CSR_F_R: begin
