@@ -337,6 +337,24 @@ module cpu_ad48 #(
     .rdata(d_rdata)   // load reads, write back to D
   );
 
+  // ------------------- Writeback Arbitration -------------------
+  localparam integer WB_PRIO_WIDTH = 3;
+  localparam [WB_PRIO_WIDTH-1:0] WB_PRIO_NONE = {WB_PRIO_WIDTH{1'b1}};
+  localparam [WB_PRIO_WIDTH-1:0] WB_PRIO_MEM  = 3'd0;
+  localparam [WB_PRIO_WIDTH-1:0] WB_PRIO_CSR  = 3'd0;
+  localparam [WB_PRIO_WIDTH-1:0] WB_PRIO_CORE = 3'd1;
+  localparam [WB_PRIO_WIDTH-1:0] WB_PRIO_POST = 3'd2;
+
+  reg                          wbA_intent_valid;
+  reg [WB_PRIO_WIDTH-1:0]      wbA_intent_prio;
+  reg [2:0]                    wbA_intent_idx;
+  reg [47:0]                   wbA_intent_data;
+
+  reg                          wbD_intent_valid;
+  reg [WB_PRIO_WIDTH-1:0]      wbD_intent_prio;
+  reg [2:0]                    wbD_intent_idx;
+  reg [47:0]                   wbD_intent_data;
+
   // ------------------- Decode Helpers -------------------
   localparam integer WB_BUNDLE_WIDTH    = (1+3+48) * 2;
   localparam integer WB_WD_DATA_LSB     = 0;
@@ -377,15 +395,91 @@ module cpu_ad48 #(
   end
   endfunction
 
+  task automatic cpu_ad48_writeback_reset;
+  begin
+    wbA_intent_valid = 1'b0;
+    wbA_intent_prio  = WB_PRIO_NONE;
+    wbA_intent_idx   = 3'd0;
+    wbA_intent_data  = 48'd0;
+    wbD_intent_valid = 1'b0;
+    wbD_intent_prio  = WB_PRIO_NONE;
+    wbD_intent_idx   = 3'd0;
+    wbD_intent_data  = 48'd0;
+  end
+  endtask
+
+  task automatic cpu_ad48_request_writeback;
+    input       dest_is_a;
+    input [2:0] dest_idx;
+    input [47:0] dest_data;
+    input [WB_PRIO_WIDTH-1:0] prio_level;
+  begin
+    if (dest_is_a) begin
+      if ((dest_idx != 3'd0) &&
+          (!wbA_intent_valid || (prio_level <= wbA_intent_prio))) begin
+        wbA_intent_valid = 1'b1;
+        wbA_intent_prio  = prio_level;
+        wbA_intent_idx   = dest_idx;
+        wbA_intent_data  = dest_data;
+      end
+    end else begin
+      if (!wbD_intent_valid || (prio_level <= wbD_intent_prio)) begin
+        wbD_intent_valid = 1'b1;
+        wbD_intent_prio  = prio_level;
+        wbD_intent_idx   = dest_idx;
+        wbD_intent_data  = dest_data;
+      end
+    end
+  end
+  endtask
+
+  task automatic cpu_ad48_writeback_finalize;
+  begin
+    weA     = 1'b0;
+    wA_idx  = 3'd0;
+    wA_data = 48'd0;
+    weD     = 1'b0;
+    wD_idx  = 3'd0;
+    wD_data = 48'd0;
+    ssp_write_en   = 1'b0;
+    ssp_write_data = 48'd0;
+
+    if (wbD_intent_valid) begin
+      weD     = 1'b1;
+      wD_idx  = wbD_intent_idx;
+      wD_data = wbD_intent_data;
+    end
+
+    if (wbA_intent_valid) begin
+      if (handler_active && (wbA_intent_idx == 3'd7)) begin
+        ssp_write_en   = 1'b1;
+        ssp_write_data = wbA_intent_data;
+      end else begin
+        weA     = 1'b1;
+        wA_idx  = wbA_intent_idx;
+        wA_data = wbA_intent_data;
+      end
+    end
+  end
+  endtask
+
   task automatic cpu_ad48_assign_writeback;
     input [WB_BUNDLE_WIDTH-1:0] bundle;
   begin
-    weA     = bundle[WB_WA_WE_BIT];
-    wA_idx  = bundle[WB_WA_IDX_MSB:WB_WA_IDX_LSB];
-    wA_data = bundle[WB_WA_DATA_MSB:WB_WA_DATA_LSB];
-    weD     = bundle[WB_WD_WE_BIT];
-    wD_idx  = bundle[WB_WD_IDX_MSB:WB_WD_IDX_LSB];
-    wD_data = bundle[WB_WD_DATA_MSB:WB_WD_DATA_LSB];
+    if (bundle[WB_WA_WE_BIT]) begin
+      cpu_ad48_request_writeback(
+        1'b1,
+        bundle[WB_WA_IDX_MSB:WB_WA_IDX_LSB],
+        bundle[WB_WA_DATA_MSB:WB_WA_DATA_LSB],
+        WB_PRIO_CORE);
+    end
+    if (bundle[WB_WD_WE_BIT]) begin
+      cpu_ad48_request_writeback(
+        1'b0,
+        bundle[WB_WD_IDX_MSB:WB_WD_IDX_LSB],
+        bundle[WB_WD_DATA_MSB:WB_WD_DATA_LSB],
+        WB_PRIO_CORE);
+    end
   end
   endtask
 
@@ -531,8 +625,7 @@ module cpu_ad48 #(
     integer idx;
     integer first_found;
     // defaults
-    weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
-    weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
+    cpu_ad48_writeback_reset();
     ssp_write_en = 1'b0; ssp_write_data = 48'd0;
 
     // default ALU wiring: use rsA, rsD; swap for commutatives when requested
@@ -617,11 +710,11 @@ module cpu_ad48 #(
         end else begin
           alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
           d_addr = mem_addr_index;
-          weD = 1'b1; wD_idx = ld_rdD; wD_data = d_rdata;
+          cpu_ad48_request_writeback(1'b0, ld_rdD, d_rdata, WB_PRIO_MEM);
 
           // post-inc writeback to A (but never to A0)
           if (mem_post_update_en) begin
-            weA = 1'b1; wA_idx = mem_post_update_idx; wA_data = mem_post_update_value;
+            cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
           end
         end
       end
@@ -635,7 +728,7 @@ module cpu_ad48 #(
           d_we   = 1'b1;
 
           if (mem_post_update_en) begin
-            weA = 1'b1; wA_idx = mem_post_update_idx; wA_data = mem_post_update_value;
+            cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
           end
         end
       end
@@ -779,10 +872,10 @@ module cpu_ad48 #(
         if (csr_valid_access && !csr_illegal) begin
           if (rdBankA) begin
             if (rdIdx != 3'd0) begin
-              weA = 1'b1; wA_idx = rdIdx; wA_data = csr_read_value;
+              cpu_ad48_request_writeback(1'b1, rdIdx, csr_read_value, WB_PRIO_CSR);
             end
           end else begin
-            weD = 1'b1; wD_idx = rdIdx; wD_data = csr_read_value;
+            cpu_ad48_request_writeback(1'b0, rdIdx, csr_read_value, WB_PRIO_CSR);
           end
         end
         if (csr_illegal) begin
@@ -820,13 +913,7 @@ module cpu_ad48 #(
       endcase
     end
 
-    if (handler_active && weA) begin
-      if (wA_idx == 3'd7) begin
-        ssp_write_en   = 1'b1;
-        ssp_write_data = wA_data;
-        weA            = 1'b0;
-      end
-    end
+    cpu_ad48_writeback_finalize();
 
     if (resetn) begin
       if (illegal_instr) begin
