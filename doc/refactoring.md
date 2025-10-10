@@ -52,7 +52,7 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** The single sequential `always` updates PC, privilege, every CSR, counters, and IRQ bookkeeping, complicating reasoning about ordering.
 - **Action:** Split into themed always blocks or tasks (`update_pc_branching`, `update_privilege_status`, `update_counters`, `update_irq_state`) to isolate dependencies and support future pipelines.
 
-## Control Block Decomposition
+## Control Block Decomposition (not now, maybe later)
 - **Scope:** `src/rtl/cpu_ad48.v:384`
 - **Pain point:** Single combinational `always @*` interleaves decode, ALU steering, branch handling, memory sequencing, CSR coordination, and trap prep.
 - **Action:** Carve themed control sub-blocks (e.g., `decode_exec`, `mem_access_ctrl`, `csr_dispatch`, `trap_precheck`) as tasks or child modules to shrink the top-level case tree and ease incremental additions.
