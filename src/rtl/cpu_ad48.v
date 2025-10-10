@@ -327,6 +327,122 @@ module cpu_ad48 #(
     .rdata(d_rdata)   // load reads, write back to D
   );
 
+  // ------------------- Decode Helpers -------------------
+  localparam integer WB_BUNDLE_WIDTH    = (1+3+48) * 2;
+  localparam integer WB_WD_DATA_LSB     = 0;
+  localparam integer WB_WD_DATA_MSB     = WB_WD_DATA_LSB + 48 - 1;
+  localparam integer WB_WD_IDX_LSB      = WB_WD_DATA_MSB + 1;
+  localparam integer WB_WD_IDX_MSB      = WB_WD_IDX_LSB + 3 - 1;
+  localparam integer WB_WD_WE_BIT       = WB_WD_IDX_MSB + 1;
+  localparam integer WB_WA_DATA_LSB     = WB_WD_WE_BIT + 1;
+  localparam integer WB_WA_DATA_MSB     = WB_WA_DATA_LSB + 48 - 1;
+  localparam integer WB_WA_IDX_LSB      = WB_WA_DATA_MSB + 1;
+  localparam integer WB_WA_IDX_MSB      = WB_WA_IDX_LSB + 3 - 1;
+  localparam integer WB_WA_WE_BIT       = WB_WA_IDX_MSB + 1;
+
+  localparam integer ALU_CTRL_WIDTH     = 1 + 6 + 6;
+  localparam integer ALU_CTRL_SHAMT_LSB = 0;
+  localparam integer ALU_CTRL_SHAMT_MSB = ALU_CTRL_SHAMT_LSB + 6 - 1;
+  localparam integer ALU_CTRL_OP_LSB    = ALU_CTRL_SHAMT_MSB + 1;
+  localparam integer ALU_CTRL_OP_MSB    = ALU_CTRL_OP_LSB + 6 - 1;
+  localparam integer ALU_CTRL_VALID_BIT = ALU_CTRL_OP_MSB + 1;
+
+  function [WB_BUNDLE_WIDTH-1:0] cpu_ad48_make_writeback_bundle;
+    input dest_is_a;
+    input [2:0] dest_idx;
+    input [47:0] dest_data;
+    reg [WB_BUNDLE_WIDTH-1:0] bundle;
+  begin
+    bundle = {WB_BUNDLE_WIDTH{1'b0}};
+    if (dest_is_a) begin
+      bundle[WB_WA_WE_BIT] = (dest_idx != 3'd0);
+      bundle[WB_WA_IDX_MSB:WB_WA_IDX_LSB] = dest_idx;
+      bundle[WB_WA_DATA_MSB:WB_WA_DATA_LSB] = dest_data;
+    end else begin
+      bundle[WB_WD_WE_BIT] = 1'b1;
+      bundle[WB_WD_IDX_MSB:WB_WD_IDX_LSB] = dest_idx;
+      bundle[WB_WD_DATA_MSB:WB_WD_DATA_LSB] = dest_data;
+    end
+    cpu_ad48_make_writeback_bundle = bundle;
+  end
+  endfunction
+
+  task automatic cpu_ad48_assign_writeback;
+    input [WB_BUNDLE_WIDTH-1:0] bundle;
+  begin
+    weA     = bundle[WB_WA_WE_BIT];
+    wA_idx  = bundle[WB_WA_IDX_MSB:WB_WA_IDX_LSB];
+    wA_data = bundle[WB_WA_DATA_MSB:WB_WA_DATA_LSB];
+    weD     = bundle[WB_WD_WE_BIT];
+    wD_idx  = bundle[WB_WD_IDX_MSB:WB_WD_IDX_LSB];
+    wD_data = bundle[WB_WD_DATA_MSB:WB_WD_DATA_LSB];
+  end
+  endtask
+
+  function [ALU_CTRL_WIDTH-1:0] cpu_ad48_encode_alu_ctrl;
+    input valid;
+    input [5:0] op;
+    input [5:0] shamt_value;
+    reg [ALU_CTRL_WIDTH-1:0] ctrl;
+  begin
+    ctrl = {ALU_CTRL_WIDTH{1'b0}};
+    ctrl[ALU_CTRL_VALID_BIT] = valid;
+    ctrl[ALU_CTRL_OP_MSB:ALU_CTRL_OP_LSB] = op;
+    ctrl[ALU_CTRL_SHAMT_MSB:ALU_CTRL_SHAMT_LSB] = shamt_value;
+    cpu_ad48_encode_alu_ctrl = ctrl;
+  end
+  endfunction
+
+  function [ALU_CTRL_WIDTH-1:0] cpu_ad48_decode_alu_ext_ctrl;
+    input [3:0] opcode_ext;
+    input swap_operands;
+    input [47:0] src_a;
+    input [47:0] src_d;
+    reg [5:0] shift_amt;
+  begin
+    shift_amt = swap_operands ? src_a[5:0] : src_d[5:0];
+    case (opcode_ext)
+      F_ADD: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h00, 6'd0);
+      F_SUB: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h01, 6'd0);
+      F_AND: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h02, 6'd0);
+      F_OR : cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h03, 6'd0);
+      F_XOR: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h04, 6'd0);
+      F_SLL: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h05, shift_amt);
+      F_SRL: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h06, shift_amt);
+      F_SRA: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h07, shift_amt);
+      F_NOT: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b1, 6'h08, 6'd0);
+      default: cpu_ad48_decode_alu_ext_ctrl = cpu_ad48_encode_alu_ctrl(1'b0, 6'h00, 6'd0);
+    endcase
+  end
+  endfunction
+
+  task automatic cpu_ad48_execute_alui;
+    input [47:0] src_value;
+    input [47:0] imm_value;
+    input [5:0]  shamt_value;
+    input [3:0]  subop_code;
+    input        dest_is_a;
+    input [2:0]  dest_idx;
+  begin
+    reg [7:0] alui_info;
+    reg [WB_BUNDLE_WIDTH-1:0] wb_bundle;
+    alui_info = cpu_ad48_decode_alui_subop(subop_code);
+    if (alui_info[7]) begin
+      alu_a = src_value;
+      alu_b = imm_value;
+      if (alui_info[6]) begin
+        alu_b = 48'd0;
+      end
+      shamt = shamt_value;
+      alu_op = alui_info[5:0];
+      wb_bundle = cpu_ad48_make_writeback_bundle(dest_is_a, dest_idx, alu_y);
+      cpu_ad48_assign_writeback(wb_bundle);
+    end else begin
+      illegal_instr = 1'b1;
+    end
+  end
+  endtask
+
   wire [47:0] irq_external = {{(48-IRQ_LINES){1'b0}}, irq};
   wire        timer_irq_level = (csr_timer_cmp != 48'd0) && (csr_timer >= csr_timer_cmp);
   wire [47:0] irq_timer_mask = timer_irq_level ? TIMER_IRQ_BIT_MASK : 48'd0;
@@ -402,86 +518,25 @@ module cpu_ad48 #(
     if (resetn) begin
       case (op)
       OP_ALU: begin
-        // Map extended opcode nibble to ALU op
-        reg op_valid;
-        op_valid = 1'b1;
-        case (op_ext)
-          F_ADD: alu_op = 6'h00;
-          F_SUB: alu_op = 6'h01;
-          F_AND: alu_op = 6'h02;
-          F_OR : alu_op = 6'h03;
-          F_XOR: alu_op = 6'h04;
-          F_SLL: begin alu_op = 6'h05; shamt = (swap ? rA[5:0] : rD[5:0]); end // prefer imm shifts; var allowed if using D as shamt
-          F_SRL: begin alu_op = 6'h06; shamt = (swap ? rA[5:0] : rD[5:0]); end
-          F_SRA: begin alu_op = 6'h07; shamt = (swap ? rA[5:0] : rD[5:0]); end
-          F_NOT: alu_op = 6'h08;
-          default: op_valid = 1'b0;
-        endcase
-        if (op_valid) begin
-          if (rdBankA) begin
-            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-          end else begin
-            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
-          end
+        reg [ALU_CTRL_WIDTH-1:0] alu_ctrl;
+        reg [WB_BUNDLE_WIDTH-1:0] wb_bundle;
+        alu_ctrl = cpu_ad48_decode_alu_ext_ctrl(op_ext, swap, rA, rD);
+        if (alu_ctrl[ALU_CTRL_VALID_BIT]) begin
+          alu_op = alu_ctrl[ALU_CTRL_OP_MSB:ALU_CTRL_OP_LSB];
+          shamt  = alu_ctrl[ALU_CTRL_SHAMT_MSB:ALU_CTRL_SHAMT_LSB];
+          wb_bundle = cpu_ad48_make_writeback_bundle(rdBankA, rdIdx, alu_y);
+          cpu_ad48_assign_writeback(wb_bundle);
         end else begin
           illegal_instr = 1'b1;
         end
       end
 
       OP_ALUI_A: begin
-        // Unary on A with immediate
-        reg [7:0] alui_info;
-        reg       op_valid;
-        reg       imm_zero;
-        alu_a = rA;
-        alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
-        shamt = imm27[5:0];
-
-        alui_info = cpu_ad48_decode_alui_subop(subop[3:0]);
-        op_valid  = alui_info[7];
-        imm_zero  = alui_info[6];
-
-        if (op_valid) begin
-          alu_op = alui_info[5:0];
-          if (imm_zero) begin
-            alu_b = 48'd0;
-          end
-          if (rdBankA) begin
-            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-          end else begin
-            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
-          end
-        end else begin
-          illegal_instr = 1'b1;
-        end
+        cpu_ad48_execute_alui(rA, SX_imm27, imm27[5:0], subop[3:0], rdBankA, rdIdx);
       end
 
       OP_ALUI_D: begin
-        // Unary on D with immediate
-        reg [7:0] alui_info;
-        reg       op_valid;
-        reg       imm_zero;
-        alu_a = rD;
-        alu_b = SX_imm27;
-        shamt = imm27[5:0];
-
-        alui_info = cpu_ad48_decode_alui_subop(subop[3:0]);
-        op_valid  = alui_info[7];
-        imm_zero  = alui_info[6];
-
-        if (op_valid) begin
-          alu_op = alui_info[5:0];
-          if (imm_zero) begin
-            alu_b = 48'd0;
-          end
-          if (rdBankA) begin
-            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-          end else begin
-            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
-          end
-        end else begin
-          illegal_instr = 1'b1;
-        end
+        cpu_ad48_execute_alui(rD, SX_imm27, imm27[5:0], subop[3:0], rdBankA, rdIdx);
       end
 
       OP_LD: begin
