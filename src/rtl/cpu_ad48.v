@@ -280,6 +280,24 @@ module cpu_ad48 #(
     .lt_u(alu_lt_u)
   );
 
+  // Helper: decode ALU immediate sub-ops into {valid, imm_zero, alu_op}.
+  function automatic [7:0] decode_alui_subop;
+    input [3:0] subop;
+    begin
+      case (subop)
+        F_ADD: decode_alui_subop = {1'b1, 1'b0, 6'h00};
+        F_AND: decode_alui_subop = {1'b1, 1'b0, 6'h02};
+        F_OR : decode_alui_subop = {1'b1, 1'b0, 6'h03};
+        F_XOR: decode_alui_subop = {1'b1, 1'b0, 6'h04};
+        F_SLL: decode_alui_subop = {1'b1, 1'b0, 6'h05};
+        F_SRL: decode_alui_subop = {1'b1, 1'b0, 6'h06};
+        F_SRA: decode_alui_subop = {1'b1, 1'b0, 6'h07};
+        F_NOT: decode_alui_subop = {1'b1, 1'b1, 6'h08};
+        default: decode_alui_subop = {1'b0, 1'b0, 6'h00};
+      endcase
+    end
+  endfunction
+
   // ------------------- DMEM -------------------
   wire [47:0] d_rdata;
   reg         d_we;
@@ -396,67 +414,57 @@ module cpu_ad48 #(
 
       OP_ALUI_A: begin
         // Unary on A with immediate
-      alu_a = rA;
-      alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
-      shamt = imm27[5:0];
+        reg [7:0] alui_info;
+        reg       op_valid;
+        reg       imm_zero;
+        alu_a = rA;
+        alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
+        shamt = imm27[5:0];
 
-        begin
-          reg op_valid;
-          op_valid = 1'b1;
-          case (subop[3:0])
-            F_ADD: alu_op = 6'h00; // ADDI_A
-            F_AND: alu_op = 6'h02; // ANDI_A
-            F_OR : alu_op = 6'h03; // ORI_A
-            F_XOR: alu_op = 6'h04; // XORI_A
-            F_SLL: alu_op = 6'h05; // SLLI_A
-            F_SRL: alu_op = 6'h06; // SRLI_A
-            F_SRA: alu_op = 6'h07; // SRAI_A
-            F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT A
-            default: op_valid = 1'b0;
-          endcase
+        alui_info = decode_alui_subop(subop[3:0]);
+        op_valid  = alui_info[7];
+        imm_zero  = alui_info[6];
 
-          if (op_valid) begin
-            if (rdBankA) begin
-              weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-            end else begin
-              weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
-            end
-          end else begin
-            illegal_instr = 1'b1;
+        if (op_valid) begin
+          alu_op = alui_info[5:0];
+          if (imm_zero) begin
+            alu_b = 48'd0;
           end
+          if (rdBankA) begin
+            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+          end else begin
+            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          end
+        end else begin
+          illegal_instr = 1'b1;
         end
       end
 
       OP_ALUI_D: begin
         // Unary on D with immediate
-      alu_a = rD;
-      alu_b = SX_imm27;
-      shamt = imm27[5:0];
+        reg [7:0] alui_info;
+        reg       op_valid;
+        reg       imm_zero;
+        alu_a = rD;
+        alu_b = SX_imm27;
+        shamt = imm27[5:0];
 
-        begin
-          reg op_valid;
-          op_valid = 1'b1;
-          case (subop[3:0])
-            F_ADD: alu_op = 6'h00; // ADDI_D
-            F_AND: alu_op = 6'h02; // ANDI_D
-            F_OR : alu_op = 6'h03; // ORI_D
-            F_XOR: alu_op = 6'h04; // XORI_D
-            F_SLL: alu_op = 6'h05; // SLLI_D
-            F_SRL: alu_op = 6'h06; // SRLI_D
-            F_SRA: alu_op = 6'h07; // SRAI_D
-            F_NOT: begin alu_op = 6'h08; alu_b = 48'd0; end // NOT D
-            default: op_valid = 1'b0;
-          endcase
+        alui_info = decode_alui_subop(subop[3:0]);
+        op_valid  = alui_info[7];
+        imm_zero  = alui_info[6];
 
-          if (op_valid) begin
-            if (rdBankA) begin
-              weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
-            end else begin
-              weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
-            end
-          end else begin
-            illegal_instr = 1'b1;
+        if (op_valid) begin
+          alu_op = alui_info[5:0];
+          if (imm_zero) begin
+            alu_b = 48'd0;
           end
+          if (rdBankA) begin
+            weA = (rdIdx != 3'd0); wA_idx = rdIdx; wA_data = alu_y;
+          end else begin
+            weD = 1'b1; wD_idx = rdIdx; wD_data = alu_y;
+          end
+        end else begin
+          illegal_instr = 1'b1;
         end
       end
 
