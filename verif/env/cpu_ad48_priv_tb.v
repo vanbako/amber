@@ -144,6 +144,11 @@ module cpu_ad48_priv_tb;
       $fatal(1);
     end
 
+    if (dut.csr_lr !== dut.csr_epc) begin
+      $display("PRIV TB: LR/EPC mismatch. LR=%h EPC=%h", dut.csr_lr, dut.csr_epc);
+      $fatal(1);
+    end
+
     // Post-IRET state: returned to user mode with interrupt enables restored.
     if (dut.priv_mode !== PRIV_USER) begin
       $display("PRIV TB: priv_mode after IRET mismatch. Got %0d expected %0d", dut.priv_mode, PRIV_USER);
@@ -180,6 +185,16 @@ module cpu_ad48_priv_tb;
     end
     if (dut.csr_scratch !== 48'd0) begin
       $display("PRIV TB: SCRATCH modified by user write. value=%h", dut.csr_scratch);
+      $fatal(1);
+    end
+
+    if (dut.csr_lr !== to48(48'd12)) begin
+      $display("PRIV TB: LR not updated with handler resume PC. value=%h", dut.csr_lr);
+      $fatal(1);
+    end
+
+    if (dut.handler_active !== 1'b0) begin
+      $display("PRIV TB: handler_active stuck high after IRET");
       $fatal(1);
     end
 

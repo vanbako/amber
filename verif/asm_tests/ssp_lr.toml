@@ -1,0 +1,15 @@
+[program]
+name = "ssp_lr"
+format = "memh"
+output = "../../build/asm_tests/ssp_lr.memh"
+listing = "../../build/asm_tests/ssp_lr.lst"
+imem_output = "../../build/asm_tests/ssp_lr.memh"
+
+[[segment]]
+label = "ssp_lr"
+source = "ssp_lr.asm"
+
+[[backend]]
+type = "simulation"
+name = "ssp_lr-sim"
+max_cycles = 1024

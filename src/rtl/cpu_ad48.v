@@ -142,6 +142,8 @@ module cpu_ad48 #(
   localparam [11:0] CSR_SCRATCH    = 12'h001;
   localparam [11:0] CSR_EPC        = 12'h002;
   localparam [11:0] CSR_CAUSE      = 12'h003;
+  localparam [11:0] CSR_LR         = 12'h004;
+  localparam [11:0] CSR_SSP        = 12'h005;
   localparam [11:0] CSR_IRQ_ENABLE = 12'h010;
   localparam [11:0] CSR_IRQ_PENDING= 12'h011;
   localparam [11:0] CSR_IRQ_VECTOR = 12'h012;
@@ -174,6 +176,8 @@ module cpu_ad48 #(
   reg [47:0] csr_scratch;
   reg [47:0] csr_epc;
   reg [47:0] csr_cause;
+  reg [47:0] csr_lr;
+  reg [47:0] csr_ssp;
   reg [47:0] csr_cycle;
   reg [47:0] csr_instret;
   reg [47:0] csr_timer;
@@ -204,6 +208,7 @@ module cpu_ad48 #(
   reg [47:0] trap_cause_value;
   reg [47:0] trap_epc_value;
   reg        iret;
+  reg        handler_active;
 
   reg [47:0] csr_read_value;
   reg [47:0] csr_write_value;
@@ -213,21 +218,34 @@ module cpu_ad48 #(
   reg [1:0]  csr_required_priv;
   reg        csr_known;
   reg        csr_valid_access;
+  reg        ssp_write_en;
+  reg [47:0] ssp_write_data;
 
   // ------------------- Regfiles -------------------
-  wire [47:0] rA, rD;
+  wire [47:0] rA_pre, rD;
+  wire [47:0] rA;
+  wire [2:0]  a_raddr;
   reg         weA, weD;
   reg  [2:0]  wA_idx, wD_idx;
   reg  [47:0] wA_data, wD_data;
 
+  assign a_raddr =
+    (op==OP_BR)   ? br_rsA  :
+    (op==OP_JALR) ? jr_rsA  :
+                    rsA;
+
   regfileA RF_A(
     .clk(clk),
-    .raddr((op==OP_BR) ? br_rsA : (op==OP_JALR ? jr_rsA : rsA)),
-    .rdata(rA),
+    .raddr(a_raddr),
+    .rdata(rA_pre),
     .we(weA),
     .waddr(wA_idx),
     .wdata(wA_data)
   );
+
+  assign rA =
+    (handler_active && (a_raddr == 3'd7)) ? csr_ssp :
+                                            rA_pre;
   wire [2:0] d_raddr =
     (op==OP_BR)     ? br_rsD  :
     (op==OP_ST)     ? st_rsD  :
@@ -297,6 +315,7 @@ module cpu_ad48 #(
     // defaults
     weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
     weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
+    ssp_write_en = 1'b0; ssp_write_data = 48'd0;
 
     // default ALU wiring: use rsA, rsD; swap for commutatives when requested
     alu_a = swap ? rD : rA;
@@ -544,6 +563,16 @@ module cpu_ad48 #(
             csr_required_priv= PRIV_SUPERVISOR;
             csr_known        = 1'b1;
           end
+          CSR_LR: begin
+            csr_read_value   = csr_lr;
+            csr_required_priv= PRIV_SUPERVISOR;
+            csr_known        = 1'b1;
+          end
+          CSR_SSP: begin
+            csr_read_value   = csr_ssp;
+            csr_required_priv= PRIV_SUPERVISOR;
+            csr_known        = 1'b1;
+          end
           CSR_IRQ_ENABLE: begin
             csr_read_value   = csr_irq_enable;
             csr_required_priv= PRIV_SUPERVISOR;
@@ -648,7 +677,7 @@ module cpu_ad48 #(
             if (priv_mode != PRIV_MACHINE) begin
               illegal_instr = 1'b1;
             end else begin
-              next_pc = csr_epc;
+              next_pc = csr_lr;
               iret = 1'b1;
             end
           end
@@ -663,6 +692,14 @@ module cpu_ad48 #(
 
       default: illegal_instr = 1'b1;
       endcase
+    end
+
+    if (handler_active && weA) begin
+      if (wA_idx == 3'd7) begin
+        ssp_write_en   = 1'b1;
+        ssp_write_data = wA_data;
+        weA            = 1'b0;
+      end
     end
 
     if (resetn) begin
@@ -701,6 +738,7 @@ module cpu_ad48 #(
       weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
       d_we = 1'b0;
       csr_write_en = 1'b0;
+      ssp_write_en = 1'b0; ssp_write_data = 48'd0;
       halt = 1'b0;
       next_pc = pc;
     end
@@ -717,6 +755,8 @@ module cpu_ad48 #(
       csr_scratch       <= 48'd0;
       csr_epc           <= 48'd0;
       csr_cause         <= 48'd0;
+      csr_lr            <= 48'd0;
+      csr_ssp           <= 48'd0;
       csr_cycle         <= 48'd0;
       csr_instret       <= 48'd0;
       csr_timer         <= 48'd0;
@@ -724,11 +764,18 @@ module cpu_ad48 #(
       csr_irq_enable    <= 48'd0;
       csr_irq_pending   <= 48'd0;
       csr_irq_vector    <= IRQ_VECTOR;
+      handler_active    <= 1'b0;
     end else begin
       if (trap_pending) begin
         pc <= trap_vector;
       end else begin
         pc <= next_pc;
+      end
+
+      if (trap_pending) begin
+        handler_active <= 1'b1;
+      end else if (iret) begin
+        handler_active <= 1'b0;
       end
 
       if (trap_pending) begin
@@ -747,12 +794,21 @@ module cpu_ad48 #(
       if (!trap_pending && csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SCRATCH)) begin
         csr_scratch <= csr_write_value;
       end
+      if (!trap_pending && csr_write_en && !csr_illegal && (csr_addr_sel == CSR_SSP)) begin
+        csr_ssp <= csr_write_value;
+      end
 
       if (trap_pending) begin
         csr_epc   <= trap_epc_value;
+        csr_lr    <= trap_epc_value;
         csr_cause <= trap_cause_value;
       end else begin
         if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_EPC)) begin
+          csr_epc <= csr_write_value;
+          csr_lr  <= csr_write_value;
+        end
+        if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_LR)) begin
+          csr_lr  <= csr_write_value;
           csr_epc <= csr_write_value;
         end
         if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_CAUSE)) begin
@@ -800,6 +856,10 @@ module cpu_ad48 #(
         end
         pending_new = pending_new | (irq_signals & IRQ_LINE_MASK);
         csr_irq_pending <= pending_new;
+      end
+
+      if (ssp_write_en) begin
+        csr_ssp <= ssp_write_data;
       end
     end
   end

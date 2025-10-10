@@ -113,10 +113,22 @@ def read_source(path: pathlib.Path) -> List[SourceLine]:
 
 
 REGISTER_RE = re.compile(r"([aAdD])([0-7])$")
+SPECIAL_REGISTERS = {
+    "ssp": ("A", 7),
+}
 
 
 def parse_register(token: str, *, want_bank: Optional[str] = None, loc: Optional[SourceLocation] = None) -> "Register":
     token = token.strip()
+    alias = token.lower()
+    if alias in SPECIAL_REGISTERS:
+        bank, idx = SPECIAL_REGISTERS[alias]
+        if want_bank and want_bank.upper() != bank:
+            msg = f"expected {want_bank}-bank register, got '{token}'"
+            if loc:
+                raise AssemblerError(f"{loc}: {msg}")
+            raise AssemblerError(msg)
+        return Register(bank=bank, index=idx, token=token)
     match = REGISTER_RE.fullmatch(token)
     if not match:
         msg = f"invalid register '{token}'"
@@ -134,7 +146,8 @@ def parse_register(token: str, *, want_bank: Optional[str] = None, loc: Optional
 
 
 def is_register_token(token: str) -> bool:
-    return bool(REGISTER_RE.fullmatch(token.strip()))
+    stripped = token.strip()
+    return bool(REGISTER_RE.fullmatch(stripped)) or stripped.lower() in SPECIAL_REGISTERS
 
 
 @dataclasses.dataclass(frozen=True)
@@ -307,6 +320,8 @@ CSR_NAME_TO_ADDR = {
     "scratch": 0x001,
     "epc": 0x002,
     "cause": 0x003,
+    "lr": 0x004,
+    "ssp": 0x005,
     "irq_enable": 0x010,
     "irq_pending": 0x011,
     "irq_vector": 0x012,

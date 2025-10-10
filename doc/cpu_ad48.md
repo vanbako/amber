@@ -24,9 +24,11 @@ Timing remains single-cycle: all combinational work completes between clock edge
 ## Programming Model
 
 ### Registers
-- **A-bank** (`A0`..`A7`): intended for addresses/base pointers. `A0` is hard-wired to zero; post-increment is disabled when `baseA == A0` to keep the invariant.
+- **A-bank** (`A0`..`A7`): intended for addresses/base pointers. `A0` is hard-wired to zero; post-increment is disabled when `baseA == A0` to keep the invariant. While a trap is active, accesses to `A7` are transparently steered to the supervisor stack pointer (`SSP`) so handlers can rely on familiar load/store idioms without mutating the user-mode value latched in the file.
 - **D-bank** (`D0`..`D7`): general-purpose data registers. Loads always write to this bank; stores read from it.
 - **PC**: 48-bit word index. `PC+1` denotes the next sequential instruction.
+- **Link register (`LR`)**: dedicated CSR (`CSR_LR`) that mirrors `CSR_EPC`. Trap entry copies the resume address into `LR`, and `IRET` returns to its value. Handlers read or update it via `csr.read lr` / `csr.write lr` when they need to adjust the resume PC.
+- **Supervisor stack pointer (`SSP`)**: exposed through `CSR_SSP` and, during a trap, aliased onto `A7` so handlers can walk the privileged stack without disturbing the user-mode `A7`.
 
 ### Immediate Sign-Extension
 - 27-bit immediates extend to 48 bits for ALU-immediate forms.
@@ -77,6 +79,8 @@ Timing remains single-cycle: all combinational work completes between clock edge
   - `0x001 SCRATCH` — general-purpose machine scratch register.
   - `0x002 EPC` — latched PC associated with the most recent trap.
   - `0x003 CAUSE` — trap cause; bit `47` is set for interrupts, while the low bits encode the exception/interrupt identifier (e.g. `2`=illegal instruction, `3`=breakpoint, `4`=load misaligned, `6`=store misaligned, interrupt IDs start at `0`).
+  - `0x004 LR` — dedicated trap link register; always mirrors `EPC` and supplies the resume address consumed by `IRET`.
+  - `0x005 SSP` — supervisor stack pointer value made visible to trap handlers and updated transparently when they manipulate `A7`.
   - `0x010 IRQ_ENABLE` — per-line interrupt mask (bit set enables the corresponding `irq` input).
   - `0x011 IRQ_PENDING` — latched interrupt requests; hardware sets/clears bits, and software can manipulate them via `csr.rs`/`csr.rc` for acknowledgement.
   - `0x012 IRQ_VECTOR` — base PC for interrupt handlers; the selected IRQ index is added to this value on entry.
@@ -88,9 +92,10 @@ Timing remains single-cycle: all combinational work completes between clock edge
 ### Traps, Exceptions & Interrupts
 - The core recognises three synchronous exceptions in `v0.2`: illegal instruction decodes, software breakpoints (`SYS 1`), and misaligned data accesses (load/store addresses that overflow or underflow the configured DMEM range). In addition, level-sensitive interrupt requests presented on the `irq[IRQ_LINES-1:0]` port are latched into `CSR_IRQ_PENDING` and serviced when the line’s enable bit is set _and_ the interrupt-enable bit for the current privilege level (`UIE`, `KIE`, or `MIE`) is high.
 - When a trap occurs, register writes, DMEM writes, and CSR side-effects for the triggering instruction are suppressed. `csr_epc` captures the PC that execution should resume from and `csr_cause` records the exception code or interrupt index (with bit `47` set for interrupts).
+- Trap entry simultaneously latches the resume address into the dedicated `LR` register, asserts the handler context so that `A7` accesses `SSP`, and keeps `CSR_EPC` mirrored to `LR`. Handlers can therefore read or modify the link value via the CSR interface, and manipulating `A7` while in the trap context updates the supervisor stack pointer without touching the user stack.
 - Pending interrupt bits remain asserted until software clears them with `csr.clear` (or rewrites `CSR_IRQ_PENDING`), allowing simple handler acknowledgement schemes. The handler PC is computed as `IRQ_VECTOR + irq_id`, letting software install per-source entry points or a compact table of jumps.
 - `csr_instret` does not increment for the trapped instruction, ensuring software-visible retirement counts stay precise.
-- `SYS 0x2` (`iret`) consults the stacked privilege and interrupt-enable fields inside `STATUS`, restores `priv_mode`, re-applies the saved enable bit for the target mode, and jumps back to `csr_epc`. The register always reflects the instruction that would have executed next when the trap was taken, preserving precise sequencing for both exceptions and interrupts.
+- `SYS 0x2` (`iret`) consults the stacked privilege and interrupt-enable fields inside `STATUS`, restores `priv_mode`, re-applies the saved enable bit for the target mode, and jumps back to the value held in `LR` (which mirrors `CSR_EPC`). The register always reflects the instruction that would have executed next when the trap was taken, preserving precise sequencing for both exceptions and interrupts.
 - Execution resumes at `TRAP_VECTOR` (default `64`) for exceptions and at `IRQ_VECTOR + irq_id` (default base `128`) for interrupts. Populate these addresses in IMEM with the appropriate handlers or halting sequences for your environment.
 
 ## Module Breakdown
