@@ -1,0 +1,15 @@
+[program]
+name = "capability"
+format = "memh"
+output = "../../build/asm_tests/capability.memh"
+listing = "../../build/asm_tests/capability.lst"
+imem_output = "../../build/asm_tests/capability.memh"
+
+[[segment]]
+label = "capability"
+source = "capability.asm"
+
+[[backend]]
+type = "simulation"
+name = "capability-sim"
+max_cycles = 512

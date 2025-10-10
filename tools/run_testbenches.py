@@ -92,9 +92,14 @@ def compile_testbench(tb: Testbench, iverilog: str) -> pathlib.Path:
     return tb.exe_path
 
 
-def run_testbench(tb: Testbench, vvp: str) -> None:
+def run_testbench(tb: Testbench, vvp: str, timeout_s: float | None) -> None:
     print(f"[run_testbenches] running {tb.name} ...")
-    subprocess.run([vvp, str(tb.exe_path)], cwd=REPO_ROOT, check=True)
+    subprocess.run(
+        [vvp, str(tb.exe_path)],
+        cwd=REPO_ROOT,
+        check=True,
+        timeout=timeout_s,
+    )
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -111,6 +116,12 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument(
         "--vvp",
         help="Override path to vvp executable",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=60.0,
+        help="Seconds to allow each vvp simulation to run (default: 60, 0 disables)",
     )
     args = parser.parse_args(argv)
 
@@ -141,11 +152,19 @@ def main(argv: List[str] | None = None) -> int:
             )
             continue
         try:
-            run_testbench(tb, vvp)
+            timeout_s = None if args.timeout == 0 else args.timeout
+            run_testbench(tb, vvp, timeout_s)
         except subprocess.CalledProcessError as exc:
             failures += 1
             print(
                 f"[run_testbenches] ERROR: vvp failed for {tb.name} (exit {exc.returncode})",
+                file=sys.stderr,
+            )
+            continue
+        except subprocess.TimeoutExpired:
+            failures += 1
+            print(
+                f"[run_testbenches] ERROR: vvp timeout for {tb.name} after {args.timeout} seconds",
                 file=sys.stderr,
             )
             continue

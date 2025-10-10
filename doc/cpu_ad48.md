@@ -29,6 +29,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - **PC**: 48-bit word index. `PC+1` denotes the next sequential instruction.
 - **Link register (`LR`)**: dedicated CSR (`CSR_LR`) that mirrors `CSR_EPC`. Trap entry copies the resume address into `LR`, and `IRET` returns to its value. Handlers read or update it via `csr.read lr` / `csr.write lr` when they need to adjust the resume PC.
 - **Supervisor stack pointer (`SSP`)**: exposed through `CSR_SSP` and, during a trap, aliased onto `A7` so handlers can walk the privileged stack without disturbing the user-mode `A7`.
+- **Capability tags (`A` bank sidecars)**: every architectural `A` register carries hidden base, limit, permission (R/W/X), and valid metadata. Loads and stores consult the sidecar before issuing memory requests; metadata resets to an all-permitted, full-range capability so existing bare-metal code keeps running until the supervisor tightens the window via the capability CSRs.
 
 ### Immediate Sign-Extension
 - 27-bit immediates extend to 48 bits for ALU-immediate forms.
@@ -59,6 +60,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - Word-addressed: `disp33` and `off` values are counted in 48-bit words. Byte addressing is intentionally omitted.
 - Post-increment applies after load/store for pointer walking; update suppressed when the base is `A0`.
 - DMEM writes occur on the clock edge; reads are combinational per `simple_mem48`.
+- Capability metadata attached to the base register must permit the requested access (`R` for loads, `W` for stores) and cover the computed address; otherwise a capability fault is raised before DMEM is touched.
 
 ### Control Flow Notes
 - Branch conditions compare `A[rsA]` against `D[rsD]` using both signed and unsigned comparators.
@@ -84,13 +86,16 @@ Timing remains single-cycle: all combinational work completes between clock edge
   - `0x010 IRQ_ENABLE` — per-line interrupt mask (bit set enables the corresponding `irq` input).
   - `0x011 IRQ_PENDING` — latched interrupt requests; hardware sets/clears bits, and software can manipulate them via `csr.rs`/`csr.rc` for acknowledgement.
   - `0x012 IRQ_VECTOR` — base PC for interrupt handlers; the selected IRQ index is added to this value on entry.
+  - `0x200-0x207 CAP_BASE<n>` — 48-bit base word address bounds for `A<n>` capabilities (`n` in `0..7`). Writes preserve limit/permissions and the valid flag.
+  - `0x210-0x217 CAP_LIMIT<n>` — 48-bit inclusive high bounds for `A<n>` capabilities.
+  - `0x220-0x227 CAP_PERM<n>` — capability control for `A<n>`; bits `[2:0]` hold the RWX permissions and bit `3` toggles the valid tag. Writes leave base/limit unchanged. Only supervisor/machine mode may touch these CSR ranges; user-mode attempts trap as illegal instructions.
   - `0xC00 CYCLE` — free-running cycle counter.
   - `0xC01 INSTRET` — retired-instruction counter.
   - `0xC02 TIMER` — machine timer counter that increments each cycle unless explicitly written.
   - `0xC03 TIMER_CMP` — timer compare register; when non-zero and `TIMER ≥ TIMER_CMP`, the timer interrupt line asserts until software updates `TIMER_CMP` or clears the pending bit.
 
 ### Traps, Exceptions & Interrupts
-- The core recognises three synchronous exceptions in `v0.2`: illegal instruction decodes, software breakpoints (`SYS 1`), and misaligned data accesses (load/store addresses that overflow or underflow the configured DMEM range). In addition, level-sensitive interrupt requests presented on the `irq[IRQ_LINES-1:0]` port are latched into `CSR_IRQ_PENDING` and serviced when the line’s enable bit is set _and_ the interrupt-enable bit for the current privilege level (`UIE`, `KIE`, or `MIE`) is high.
+- Synchronous exceptions cover illegal instruction decodes, software breakpoints (`SYS 1`), misaligned data accesses (addresses that overflow/underflow the configured DMEM range), and capability violations (cause codes `8` for loads, `9` for stores) when a base register’s metadata is invalid or lacks the required permission. In addition, level-sensitive interrupt requests presented on the `irq[IRQ_LINES-1:0]` port are latched into `CSR_IRQ_PENDING` and serviced when the line’s enable bit is set _and_ the interrupt-enable bit for the current privilege level (`UIE`, `KIE`, or `MIE`) is high.
 - When a trap occurs, register writes, DMEM writes, and CSR side-effects for the triggering instruction are suppressed. `csr_epc` captures the PC that execution should resume from and `csr_cause` records the exception code or interrupt index (with bit `47` set for interrupts).
 - Trap entry simultaneously latches the resume address into the dedicated `LR` register, asserts the handler context so that `A7` accesses `SSP`, and keeps `CSR_EPC` mirrored to `LR`. Handlers can therefore read or modify the link value via the CSR interface, and manipulating `A7` while in the trap context updates the supervisor stack pointer without touching the user stack.
 - Pending interrupt bits remain asserted until software clears them with `csr.clear` (or rewrites `CSR_IRQ_PENDING`), allowing simple handler acknowledgement schemes. The handler PC is computed as `IRQ_VECTOR + irq_id`, letting software install per-source entry points or a compact table of jumps.
@@ -103,7 +108,7 @@ Timing remains single-cycle: all combinational work completes between clock edge
 - **`src/rtl/cpu_ad48.v`**: Top-level CPU tying together fetch, decode, execute, memory, and control logic. Parameters `IM_WORDS`/`DM_WORDS` set instruction/data memory depth; `TRAP_VECTOR` selects the synchronous exception handler PC (default `64`), while `IRQ_LINES` and `IRQ_VECTOR` configure the interrupt fabric. External interrupt requests enter via the `irq[IRQ_LINES-1:0]` port.
 - **`src/rtl/cpu_ad48_instr.vh`**: Shared opcode constants and helper functions for assembling instructions (used by RTL and verification).
 - **`src/rtl/alu.v`**: 48-bit ALU implementation with comparator outputs used for branch decisions.
-- **`src/rtl/regfiles.v`**: Two 8x48 register banks with synchronous write ports.
+- **`src/rtl/regfiles.v`**: Two 8x48 register banks with synchronous write ports; the A-bank carries capability sidecars (base/limit/perms/valid) that the core enforces on memory accesses.
 - **`src/rtl/mem48.v`**: Synchronous write / combinational read memory; instantiated twice for IMEM and DMEM.
 - **`src/rtl/simple_soc_stub.v`**: Convenience wrapper around the CPU for integration or `$readmemh` preload hooks.
 

@@ -64,6 +64,14 @@ module cpu_ad48 #(
 `undef CPU_AD48_INSTR_VH
 `endif
   `include "cpu_ad48_instr.vh"
+  `include "capability_defs.vh"
+
+  localparam integer CAP_ADDR_WIDTH = `CAP_ADDR_WIDTH;
+  localparam integer CAP_PERM_WIDTH = `CAP_PERM_WIDTH;
+  localparam [CAP_PERM_WIDTH-1:0] CAP_PERM_READ  = `CAP_PERM_READ;
+  localparam [CAP_PERM_WIDTH-1:0] CAP_PERM_WRITE = `CAP_PERM_WRITE;
+  localparam [CAP_PERM_WIDTH-1:0] CAP_PERM_EXEC  = `CAP_PERM_EXEC;
+  localparam [CAP_PERM_WIDTH-1:0] CAP_PERM_ALL   = `CAP_PERM_ALL;
 
   // Opcode, funct, and branch encodings are provided by cpu_ad48_instr.vh.
 
@@ -134,6 +142,14 @@ module cpu_ad48 #(
   localparam [11:0] CSR_INSTRET    = 12'hC01;
   localparam [11:0] CSR_TIMER      = 12'hC02;
   localparam [11:0] CSR_TIMER_CMP  = 12'hC03;
+  localparam integer CAP_REG_COUNT           = 8;
+  localparam [11:0] CSR_CAP_BASE_BASE        = 12'h200;
+  localparam [11:0] CSR_CAP_BASE_LIMIT       = CSR_CAP_BASE_BASE + CAP_REG_COUNT - 1;
+  localparam [11:0] CSR_CAP_LIMIT_BASE       = 12'h210;
+  localparam [11:0] CSR_CAP_LIMIT_LIMIT      = CSR_CAP_LIMIT_BASE + CAP_REG_COUNT - 1;
+  localparam [11:0] CSR_CAP_PERM_BASE        = 12'h220;
+  localparam [11:0] CSR_CAP_PERM_LIMIT       = CSR_CAP_PERM_BASE + CAP_REG_COUNT - 1;
+  localparam integer CAP_CSR_VALID_BIT       = CAP_PERM_WIDTH;
   localparam integer TIMER_IRQ_BIT = IRQ_LINES;
   localparam integer TOTAL_IRQ_LINES = IRQ_LINES + 1;
   localparam integer IRQ_INDEX_WIDTH = (TOTAL_IRQ_LINES <= 1) ? 1 : $clog2(TOTAL_IRQ_LINES);
@@ -182,6 +198,13 @@ module cpu_ad48 #(
     .post_update_value(mem_post_update_value)
   );
 
+  wire [CAP_ADDR_WIDTH-1:0] mem_effective_addr = mem_post_update_value;
+  wire        cap_base_gt_limit   = (rA_cap_base > rA_cap_limit);
+  wire        cap_addr_below_base = (mem_effective_addr < rA_cap_base);
+  wire        cap_addr_above_limit= (mem_effective_addr > rA_cap_limit);
+  wire        cap_read_ok         = |(rA_cap_perms & CAP_PERM_READ);
+  wire        cap_write_ok        = |(rA_cap_perms & CAP_PERM_WRITE);
+
   initial begin
     if (TOTAL_IRQ_LINES > 48) begin
       $fatal(1, "cpu_ad48: TOTAL_IRQ_LINES (%0d) exceeds supported width (48)", TOTAL_IRQ_LINES);
@@ -211,6 +234,8 @@ module cpu_ad48 #(
   localparam [3:0] CAUSE_BREAKPOINT       = 4'd3;
   localparam [3:0] CAUSE_MISALIGNED_LOAD  = 4'd4;
   localparam [3:0] CAUSE_MISALIGNED_STORE = 4'd6;
+  localparam [3:0] CAUSE_CAPABILITY_LOAD  = 4'd8;
+  localparam [3:0] CAUSE_CAPABILITY_STORE = 4'd9;
 
   localparam integer TRAP_CTL_EXCEPTION_CODE_WIDTH = 4;
   localparam integer TRAP_CTL_EXCEPTION_CODE_LSB   = 0;
@@ -236,6 +261,8 @@ module cpu_ad48 #(
   reg        breakpoint_instr;
   reg        misaligned_load;
   reg        misaligned_store;
+  reg        capability_load_fault;
+  reg        capability_store_fault;
   reg        interrupt;
   reg [IRQ_INDEX_WIDTH-1:0] irq_index;
   reg        trap_taken;
@@ -260,10 +287,33 @@ module cpu_ad48 #(
   // ------------------- Regfiles -------------------
   wire [47:0] rA_pre, rD;
   wire [47:0] rA;
+  wire        rA_cap_valid;
+  wire [CAP_ADDR_WIDTH-1:0] rA_cap_base;
+  wire [CAP_ADDR_WIDTH-1:0] rA_cap_limit;
+  wire [CAP_PERM_WIDTH-1:0] rA_cap_perms;
   wire [2:0]  a_raddr;
   reg         weA, weD;
   reg  [2:0]  wA_idx, wD_idx;
   reg  [47:0] wA_data, wD_data;
+  reg         cap_we;
+  reg  [2:0]  cap_waddr;
+  reg         cap_valid_wdata;
+  reg  [CAP_ADDR_WIDTH-1:0] cap_base_wdata;
+  reg  [CAP_ADDR_WIDTH-1:0] cap_limit_wdata;
+  reg  [CAP_PERM_WIDTH-1:0] cap_perms_wdata;
+  reg         cap_intent_valid;
+  reg  [2:0]  cap_intent_idx;
+  reg         cap_intent_tag_valid;
+  reg  [CAP_ADDR_WIDTH-1:0] cap_intent_base;
+  reg  [CAP_ADDR_WIDTH-1:0] cap_intent_limit;
+  reg  [CAP_PERM_WIDTH-1:0] cap_intent_perms;
+  reg  [2:0]  cap_csr_idx;
+  reg  [47:0] cap_csr_return;
+  reg  [CAP_ADDR_WIDTH-1:0] cap_base_shadow  [0:CAP_REG_COUNT-1];
+  reg  [CAP_ADDR_WIDTH-1:0] cap_limit_shadow [0:CAP_REG_COUNT-1];
+  reg  [CAP_PERM_WIDTH-1:0] cap_perms_shadow [0:CAP_REG_COUNT-1];
+  reg                       cap_valid_shadow [0:CAP_REG_COUNT-1];
+  integer                   cap_shadow_idx;
 
   assign a_raddr =
     (op==OP_BR)   ? br_rsA  :
@@ -274,9 +324,19 @@ module cpu_ad48 #(
     .clk(clk),
     .raddr(a_raddr),
     .rdata(rA_pre),
+    .cap_valid(rA_cap_valid),
+    .cap_base(rA_cap_base),
+    .cap_limit(rA_cap_limit),
+    .cap_perms(rA_cap_perms),
     .we(weA),
     .waddr(wA_idx),
-    .wdata(wA_data)
+    .wdata(wA_data),
+    .cap_we(cap_we),
+    .cap_waddr(cap_waddr),
+    .cap_valid_in(cap_valid_wdata),
+    .cap_base_in(cap_base_wdata),
+    .cap_limit_in(cap_limit_wdata),
+    .cap_perms_in(cap_perms_wdata)
   );
 
   assign rA =
@@ -397,6 +457,28 @@ module cpu_ad48 #(
     wbD_intent_prio  = WB_PRIO_NONE;
     wbD_intent_idx   = 3'd0;
     wbD_intent_data  = 48'd0;
+    cap_intent_valid     = 1'b0;
+    cap_intent_idx       = 3'd0;
+    cap_intent_tag_valid = 1'b0;
+    cap_intent_base      = {CAP_ADDR_WIDTH{1'b0}};
+    cap_intent_limit     = {CAP_ADDR_WIDTH{1'b1}};
+    cap_intent_perms     = CAP_PERM_ALL;
+  end
+  endtask
+
+  task automatic cpu_ad48_request_capability;
+    input [2:0] idx;
+    input       tag_valid;
+    input [CAP_ADDR_WIDTH-1:0] base;
+    input [CAP_ADDR_WIDTH-1:0] limit;
+    input [CAP_PERM_WIDTH-1:0] perms;
+  begin
+    cap_intent_valid     = 1'b1;
+    cap_intent_idx       = idx;
+    cap_intent_tag_valid = tag_valid;
+    cap_intent_base      = base;
+    cap_intent_limit     = limit;
+    cap_intent_perms     = perms;
   end
   endtask
 
@@ -435,6 +517,12 @@ module cpu_ad48 #(
     wD_data = 48'd0;
     ssp_write_en   = 1'b0;
     ssp_write_data = 48'd0;
+    cap_we          = 1'b0;
+    cap_waddr       = 3'd0;
+    cap_valid_wdata = 1'b0;
+    cap_base_wdata  = {CAP_ADDR_WIDTH{1'b0}};
+    cap_limit_wdata = {CAP_ADDR_WIDTH{1'b1}};
+    cap_perms_wdata = CAP_PERM_ALL;
 
     if (wbD_intent_valid) begin
       weD     = 1'b1;
@@ -451,6 +539,15 @@ module cpu_ad48 #(
         wA_idx  = wbA_intent_idx;
         wA_data = wbA_intent_data;
       end
+    end
+
+    if (cap_intent_valid) begin
+      cap_we          = 1'b1;
+      cap_waddr       = cap_intent_idx;
+      cap_valid_wdata = cap_intent_tag_valid;
+      cap_base_wdata  = cap_intent_base;
+      cap_limit_wdata = cap_intent_limit;
+      cap_perms_wdata = cap_intent_perms;
     end
   end
   endtask
@@ -515,6 +612,8 @@ module cpu_ad48 #(
     input        breakpoint_instr_i;
     input        misaligned_load_i;
     input        misaligned_store_i;
+    input        capability_load_fault_i;
+    input        capability_store_fault_i;
     input        interrupt_i;
     input [IRQ_INDEX_WIDTH-1:0] irq_index_i;
     input [47:0] csr_irq_vector_i;
@@ -545,6 +644,12 @@ module cpu_ad48 #(
       end else if (misaligned_store_i) begin
         exception_flag      = 1'b1;
         exception_code_flag = CAUSE_MISALIGNED_STORE;
+      end else if (capability_load_fault_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_CAPABILITY_LOAD;
+      end else if (capability_store_fault_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_CAPABILITY_STORE;
       end
     end
 
@@ -793,6 +898,10 @@ module cpu_ad48 #(
     breakpoint_instr = 1'b0;
     misaligned_load  = 1'b0;
     misaligned_store = 1'b0;
+    capability_load_fault  = 1'b0;
+    capability_store_fault = 1'b0;
+    cap_csr_idx     = 3'd0;
+    cap_csr_return  = 48'd0;
     exception        = 1'b0;
     exception_code   = 4'd0;
     interrupt        = 1'b0;
@@ -836,7 +945,11 @@ module cpu_ad48 #(
         // DMEM is word-addressed: use low address bits sized to DM_WORDS
         // LD always writes to D bank (rdD)
         // Optional post-inc: A[baseA] += disp (suppressed if baseA==A0)
-        if (mem_addr_invalid) begin
+        if (!rA_cap_valid || cap_base_gt_limit ||
+            cap_addr_below_base || cap_addr_above_limit ||
+            !cap_read_ok) begin
+          capability_load_fault = 1'b1;
+        end else if (mem_addr_invalid) begin
           misaligned_load = 1'b1;
         end else begin
           alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
@@ -846,12 +959,23 @@ module cpu_ad48 #(
           // post-inc writeback to A (but never to A0)
           if (mem_post_update_en) begin
             cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
+            cpu_ad48_request_capability(
+              mem_post_update_idx,
+              rA_cap_valid,
+              rA_cap_base,
+              rA_cap_limit,
+              rA_cap_perms
+            );
           end
         end
       end
 
       OP_ST: begin
-        if (mem_addr_invalid) begin
+        if (!rA_cap_valid || cap_base_gt_limit ||
+            cap_addr_below_base || cap_addr_above_limit ||
+            !cap_write_ok) begin
+          capability_store_fault = 1'b1;
+        end else if (mem_addr_invalid) begin
           misaligned_store = 1'b1;
         end else begin
           alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
@@ -860,6 +984,13 @@ module cpu_ad48 #(
 
           if (mem_post_update_en) begin
             cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
+            cpu_ad48_request_capability(
+              mem_post_update_idx,
+              rA_cap_valid,
+              rA_cap_base,
+              rA_cap_limit,
+              rA_cap_perms
+            );
           end
         end
       end
@@ -889,26 +1020,85 @@ module cpu_ad48 #(
 
       OP_CSR: begin
         csr_addr_sel = csr_addr;
+        if ((csr_addr >= CSR_CAP_BASE_BASE) && (csr_addr <= CSR_CAP_PERM_LIMIT)) begin
+          csr_illegal = (priv_mode == PRIV_USER);
+          if (!csr_illegal) begin
+            if (csr_addr <= CSR_CAP_BASE_LIMIT) begin
+              cap_csr_idx    = csr_addr - CSR_CAP_BASE_BASE;
+              cap_csr_return = cap_base_shadow[cap_csr_idx];
+              if (op_ext == CSR_F_RW) begin
+                cpu_ad48_request_capability(
+                  cap_csr_idx,
+                  cap_valid_shadow[cap_csr_idx],
+                  rD,
+                  cap_limit_shadow[cap_csr_idx],
+                  cap_perms_shadow[cap_csr_idx]
+                );
+              end else if (op_ext != CSR_F_R) begin
+                csr_illegal = 1'b1;
+              end
+            end else if ((csr_addr >= CSR_CAP_LIMIT_BASE) && (csr_addr <= CSR_CAP_LIMIT_LIMIT)) begin
+              cap_csr_idx    = csr_addr - CSR_CAP_LIMIT_BASE;
+              cap_csr_return = cap_limit_shadow[cap_csr_idx];
+              if (op_ext == CSR_F_RW) begin
+                cpu_ad48_request_capability(
+                  cap_csr_idx,
+                  cap_valid_shadow[cap_csr_idx],
+                  cap_base_shadow[cap_csr_idx],
+                  rD,
+                  cap_perms_shadow[cap_csr_idx]
+                );
+              end else if (op_ext != CSR_F_R) begin
+                csr_illegal = 1'b1;
+              end
+            end else begin
+              cap_csr_idx = csr_addr - CSR_CAP_PERM_BASE;
+              cap_csr_return = 48'd0;
+              cap_csr_return[CAP_PERM_WIDTH-1:0] = cap_perms_shadow[cap_csr_idx];
+              cap_csr_return[CAP_CSR_VALID_BIT]  = cap_valid_shadow[cap_csr_idx];
+              if (op_ext == CSR_F_RW) begin
+                cpu_ad48_request_capability(
+                  cap_csr_idx,
+                  rD[CAP_CSR_VALID_BIT],
+                  cap_base_shadow[cap_csr_idx],
+                  cap_limit_shadow[cap_csr_idx],
+                  rD[CAP_PERM_WIDTH-1:0]
+                );
+              end else if (op_ext != CSR_F_R) begin
+                csr_illegal = 1'b1;
+              end
+            end
+          end
 
-        csr_req_bundle[CSR_REQ_VALID_BIT] = 1'b1;
-        csr_req_bundle[CSR_REQ_FUNC_MSB:CSR_REQ_FUNC_LSB] = op_ext;
-        csr_req_bundle[CSR_REQ_ADDR_MSB:CSR_REQ_ADDR_LSB] = csr_addr;
-        csr_req_bundle[CSR_REQ_RD_IS_A_BIT] = rdBankA;
-        csr_req_bundle[CSR_REQ_RD_IDX_MSB:CSR_REQ_RD_IDX_LSB] = rdIdx;
-        csr_req_bundle[CSR_REQ_SRC_MSB:CSR_REQ_SRC_LSB] = rD;
-        csr_req_bundle[CSR_REQ_PRIV_MSB:CSR_REQ_PRIV_LSB] = priv_mode;
+          if (!csr_illegal) begin
+            csr_read_value = cap_csr_return;
+            cpu_ad48_request_writeback(
+              rdBankA,
+              rdIdx,
+              cap_csr_return,
+              WB_PRIO_CSR);
+          end
+        end else begin
+          csr_req_bundle[CSR_REQ_VALID_BIT] = 1'b1;
+          csr_req_bundle[CSR_REQ_FUNC_MSB:CSR_REQ_FUNC_LSB] = op_ext;
+          csr_req_bundle[CSR_REQ_ADDR_MSB:CSR_REQ_ADDR_LSB] = csr_addr;
+          csr_req_bundle[CSR_REQ_RD_IS_A_BIT] = rdBankA;
+          csr_req_bundle[CSR_REQ_RD_IDX_MSB:CSR_REQ_RD_IDX_LSB] = rdIdx;
+          csr_req_bundle[CSR_REQ_SRC_MSB:CSR_REQ_SRC_LSB] = rD;
+          csr_req_bundle[CSR_REQ_PRIV_MSB:CSR_REQ_PRIV_LSB] = priv_mode;
 
-        csr_read_value   = csr_resp_read_value;
-        csr_write_value  = csr_resp_write_value;
-        csr_write_en     = csr_resp_write_en;
-        csr_illegal      = csr_resp_illegal;
+          csr_read_value   = csr_resp_read_value;
+          csr_write_value  = csr_resp_write_value;
+          csr_write_en     = csr_resp_write_en;
+          csr_illegal      = csr_resp_illegal;
 
-        if (csr_wb_valid) begin
-          cpu_ad48_request_writeback(
-            csr_wb_is_a,
-            csr_wb_idx,
-            csr_wb_data,
-            WB_PRIO_CSR);
+          if (csr_wb_valid) begin
+            cpu_ad48_request_writeback(
+              csr_wb_is_a,
+              csr_wb_idx,
+              csr_wb_data,
+              WB_PRIO_CSR);
+          end
         end
 
         if (csr_illegal) begin
@@ -955,6 +1145,8 @@ module cpu_ad48 #(
         breakpoint_instr,
         misaligned_load,
         misaligned_store,
+        capability_load_fault,
+        capability_store_fault,
         interrupt,
         irq_index,
         csr_irq_vector
@@ -971,6 +1163,7 @@ module cpu_ad48 #(
       csr_write_en = 1'b0;
       ssp_write_en = 1'b0; ssp_write_data = 48'd0;
       halt = 1'b0;
+      cap_we = 1'b0;
     end
     if (trap_controls[TRAP_CTL_HOLD_PC_BIT]) begin
       next_pc = pc;
@@ -1102,6 +1295,22 @@ module cpu_ad48 #(
       end
 
       csr_irq_pending <= csr_irq_pending_next;
+    end
+  end
+
+  always @(posedge clk or negedge resetn) begin : update_capability_shadow
+    if (!resetn) begin
+      for (cap_shadow_idx = 0; cap_shadow_idx < CAP_REG_COUNT; cap_shadow_idx = cap_shadow_idx + 1) begin
+        cap_base_shadow[cap_shadow_idx]  <= {CAP_ADDR_WIDTH{1'b0}};
+        cap_limit_shadow[cap_shadow_idx] <= {CAP_ADDR_WIDTH{1'b1}};
+        cap_perms_shadow[cap_shadow_idx] <= CAP_PERM_ALL;
+        cap_valid_shadow[cap_shadow_idx] <= 1'b1;
+      end
+    end else if (cap_we) begin
+      cap_base_shadow[cap_waddr]  <= cap_base_wdata;
+      cap_limit_shadow[cap_waddr] <= cap_limit_wdata;
+      cap_perms_shadow[cap_waddr] <= cap_perms_wdata;
+      cap_valid_shadow[cap_waddr] <= cap_valid_wdata;
     end
   end
 

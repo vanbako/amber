@@ -374,6 +374,12 @@ CSR_NAME_TO_ADDR = {
     "timer_cmp": 0xC03,
 }
 
+for _cap_idx in range(8):
+    CSR_NAME_TO_ADDR[f"cap_base{_cap_idx}"] = 0x200 + _cap_idx
+    CSR_NAME_TO_ADDR[f"cap_limit{_cap_idx}"] = 0x210 + _cap_idx
+    CSR_NAME_TO_ADDR[f"cap_perm{_cap_idx}"] = 0x220 + _cap_idx
+del _cap_idx
+
 
 def mask_bits(value: int, width: int) -> int:
     return value & ((1 << width) - 1)
