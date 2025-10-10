@@ -42,7 +42,7 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** Masking and accumulation of pending IRQ bits is duplicated in combinational and sequential paths.
 - **Action:** Factor out a shared function that takes current pending, write intents, and live signals, returning the next pending vector to keep policy consistent.
 
-## Trap & Exception Sequencer
+## Trap & Exception Sequencer (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:766-805`
 - **Pain point:** Exception/interrupt classification and trap vector selection are embedded mid-block, forcing control flow fall-through.
 - **Action:** Create a `trap_sequencer` helper that consumes status flags and returns `{trap_taken, vector, cause, squash_controls}` to keep the parent logic linear.

@@ -240,6 +240,24 @@ module cpu_ad48 #(
   localparam [3:0] CAUSE_MISALIGNED_LOAD  = 4'd4;
   localparam [3:0] CAUSE_MISALIGNED_STORE = 4'd6;
 
+  localparam integer TRAP_CTL_EXCEPTION_CODE_WIDTH = 4;
+  localparam integer TRAP_CTL_EXCEPTION_CODE_LSB   = 0;
+  localparam integer TRAP_CTL_EXCEPTION_CODE_MSB   =
+    TRAP_CTL_EXCEPTION_CODE_LSB + TRAP_CTL_EXCEPTION_CODE_WIDTH - 1;
+  localparam integer TRAP_CTL_IS_EXCEPTION_BIT     = TRAP_CTL_EXCEPTION_CODE_MSB + 1;
+  localparam integer TRAP_CTL_HOLD_PC_BIT          = TRAP_CTL_IS_EXCEPTION_BIT + 1;
+  localparam integer TRAP_CTL_KILL_WRITES_BIT      = TRAP_CTL_HOLD_PC_BIT + 1;
+  localparam integer TRAP_CTL_WIDTH                = TRAP_CTL_KILL_WRITES_BIT + 1;
+
+  localparam integer TRAP_SEQ_CTL_LSB         = 0;
+  localparam integer TRAP_SEQ_CTL_MSB         = TRAP_SEQ_CTL_LSB + TRAP_CTL_WIDTH - 1;
+  localparam integer TRAP_SEQ_CAUSE_LSB       = TRAP_SEQ_CTL_MSB + 1;
+  localparam integer TRAP_SEQ_CAUSE_MSB       = TRAP_SEQ_CAUSE_LSB + 48 - 1;
+  localparam integer TRAP_SEQ_VECTOR_LSB      = TRAP_SEQ_CAUSE_MSB + 1;
+  localparam integer TRAP_SEQ_VECTOR_MSB      = TRAP_SEQ_VECTOR_LSB + 48 - 1;
+  localparam integer TRAP_SEQ_TAKEN_BIT       = TRAP_SEQ_VECTOR_MSB + 1;
+  localparam integer TRAP_SEQ_WIDTH           = TRAP_SEQ_TAKEN_BIT + 1;
+
   reg        exception;
   reg [3:0]  exception_code;
   reg        illegal_instr;
@@ -252,6 +270,7 @@ module cpu_ad48 #(
   reg [47:0] trap_vector;
   reg [47:0] trap_cause_value;
   reg [47:0] trap_epc_value;
+  reg [TRAP_CTL_WIDTH-1:0] trap_controls;
   reg        iret;
   reg        handler_active;
 
@@ -515,6 +534,74 @@ module cpu_ad48 #(
   begin
     cpu_ad48_jal_link_write =
       cpu_ad48_make_writeback_bundle(~link_is_d, link_idx, link_value);
+  end
+  endfunction
+
+  function automatic [TRAP_SEQ_WIDTH-1:0] trap_sequencer;
+    input        resetn_i;
+    input        illegal_instr_i;
+    input        breakpoint_instr_i;
+    input        misaligned_load_i;
+    input        misaligned_store_i;
+    input        interrupt_i;
+    input [IRQ_INDEX_WIDTH-1:0] irq_index_i;
+    input [47:0] csr_irq_vector_i;
+    reg        exception_flag;
+    reg [3:0]  exception_code_flag;
+    reg        trap_taken_flag;
+    reg [47:0] trap_vector_flag;
+    reg [47:0] trap_cause_flag;
+    reg [TRAP_CTL_WIDTH-1:0] trap_control_flag;
+  begin
+    exception_flag      = 1'b0;
+    exception_code_flag = 4'd0;
+    trap_taken_flag     = 1'b0;
+    trap_vector_flag    = TRAP_VECTOR;
+    trap_cause_flag     = 48'd0;
+    trap_control_flag   = {TRAP_CTL_WIDTH{1'b0}};
+
+    if (resetn_i) begin
+      if (illegal_instr_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_ILLEGAL_INSTR;
+      end else if (breakpoint_instr_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_BREAKPOINT;
+      end else if (misaligned_load_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_MISALIGNED_LOAD;
+      end else if (misaligned_store_i) begin
+        exception_flag      = 1'b1;
+        exception_code_flag = CAUSE_MISALIGNED_STORE;
+      end
+    end
+
+    if (exception_flag) begin
+      trap_taken_flag   = 1'b1;
+      trap_vector_flag  = TRAP_VECTOR;
+      trap_cause_flag   = {44'd0, exception_code_flag};
+      trap_control_flag[TRAP_CTL_KILL_WRITES_BIT] = 1'b1;
+      trap_control_flag[TRAP_CTL_HOLD_PC_BIT]     = 1'b1;
+      trap_control_flag[TRAP_CTL_IS_EXCEPTION_BIT]= 1'b1;
+      trap_control_flag[TRAP_CTL_EXCEPTION_CODE_MSB:TRAP_CTL_EXCEPTION_CODE_LSB] =
+        exception_code_flag;
+    end else if (interrupt_i) begin
+      trap_taken_flag   = 1'b1;
+      trap_vector_flag  =
+        csr_irq_vector_i + {{(48-IRQ_INDEX_WIDTH){1'b0}}, irq_index_i};
+      trap_cause_flag   = 48'd0;
+      trap_cause_flag[47] = 1'b1;
+      trap_cause_flag[IRQ_INDEX_WIDTH-1:0] = irq_index_i;
+      trap_control_flag[TRAP_CTL_KILL_WRITES_BIT] = 1'b1;
+      trap_control_flag[TRAP_CTL_HOLD_PC_BIT]     = 1'b1;
+    end
+
+    trap_sequencer = {
+      trap_taken_flag,
+      trap_vector_flag,
+      trap_cause_flag,
+      trap_control_flag
+    };
   end
   endfunction
 
@@ -954,44 +1041,31 @@ module cpu_ad48 #(
 
     cpu_ad48_writeback_finalize();
 
-    if (resetn) begin
-      if (illegal_instr) begin
-        exception      = 1'b1;
-        exception_code = CAUSE_ILLEGAL_INSTR;
-      end else if (breakpoint_instr) begin
-        exception      = 1'b1;
-        exception_code = CAUSE_BREAKPOINT;
-      end else if (misaligned_load) begin
-        exception      = 1'b1;
-        exception_code = CAUSE_MISALIGNED_LOAD;
-      end else if (misaligned_store) begin
-        exception      = 1'b1;
-        exception_code = CAUSE_MISALIGNED_STORE;
-      end
-    end else begin
-      exception      = 1'b0;
-      exception_code = 4'd0;
-    end
+    {trap_taken, trap_vector, trap_cause_value, trap_controls} =
+      trap_sequencer(
+        resetn,
+        illegal_instr,
+        breakpoint_instr,
+        misaligned_load,
+        misaligned_store,
+        interrupt,
+        irq_index,
+        csr_irq_vector
+      );
 
-    if (exception) begin
-      trap_taken       = 1'b1;
-      trap_vector      = TRAP_VECTOR;
-      trap_cause_value = {44'd0, exception_code};
-    end else if (interrupt) begin
-      trap_taken       = 1'b1;
-      trap_vector      = csr_irq_vector + {{(48-IRQ_INDEX_WIDTH){1'b0}}, irq_index};
-      trap_cause_value = 48'd0;
-      trap_cause_value[47] = 1'b1;
-      trap_cause_value[IRQ_INDEX_WIDTH-1:0] = irq_index;
-    end
+    exception      = trap_controls[TRAP_CTL_IS_EXCEPTION_BIT];
+    exception_code =
+      trap_controls[TRAP_CTL_EXCEPTION_CODE_MSB:TRAP_CTL_EXCEPTION_CODE_LSB];
 
-    if (trap_taken) begin
+    if (trap_controls[TRAP_CTL_KILL_WRITES_BIT]) begin
       weA = 1'b0; wA_idx = 3'd0; wA_data = 48'd0;
       weD = 1'b0; wD_idx = 3'd0; wD_data = 48'd0;
       d_we = 1'b0;
       csr_write_en = 1'b0;
       ssp_write_en = 1'b0; ssp_write_data = 48'd0;
       halt = 1'b0;
+    end
+    if (trap_controls[TRAP_CTL_HOLD_PC_BIT]) begin
       next_pc = pc;
     end
   end
