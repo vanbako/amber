@@ -115,24 +115,6 @@ module cpu_ad48 #(
   wire [32:0] jr_imm33= instr[32:0];
   wire [11:0] csr_addr= instr[23:12];
 
-  // Sign-extends
-  wire [47:0] SX_imm27  = {{21{imm27[26]}}, imm27};
-  wire [47:0] SX_disp33 = {{15{disp33[32]}}, disp33};
-  wire [47:0] SX_br31   = {{17{br_off31[30]}}, br_off31};
-  wire [47:0] SX_jal36  = {{12{jal_off[35]}}, jal_off};
-  wire [47:0] SX_jr33   = {{15{jr_imm33[32]}}, jr_imm33};
-  wire [48:0] jalr_target_ext = {1'b0, rA} + {SX_jr33[47], SX_jr33};
-  wire [47:0] jalr_target     = jalr_target_ext[47:0];
-  wire        jalr_target_ovf = jalr_target_ext[48];
-  wire        jalr_target_oob = jalr_target_ovf || (jalr_target >= IM_WORDS);
-
-  wire [48:0] base_plus_disp_ext = {1'b0, rA} + {SX_disp33[47], SX_disp33};
-  wire [47:0] base_plus_disp     = base_plus_disp_ext[47:0];
-  wire        base_plus_disp_ovf = base_plus_disp_ext[48];
-  wire        base_plus_disp_oob = (base_plus_disp >= DM_WORDS);
-  wire        mem_addr_invalid   = base_plus_disp_ovf || base_plus_disp_oob;
-  wire [$clog2(DM_WORDS)-1:0] base_disp_idx = base_plus_disp[$clog2(DM_WORDS)-1:0];
-
   // ------------------- CSR constants & state -------------------
   localparam [1:0] PRIV_USER       = 2'd0;
   localparam [1:0] PRIV_SUPERVISOR = 2'd1;
@@ -196,6 +178,26 @@ module cpu_ad48 #(
   localparam integer CSR_META_PRIV_LSB      = CSR_META_READSEL_MSB + 1;
   localparam integer CSR_META_PRIV_MSB      = CSR_META_PRIV_LSB + CSR_META_PRIV_WIDTH - 1;
   localparam integer CSR_META_VALID_BIT     = CSR_META_PRIV_MSB + 1;
+
+`include "cpu_ad48_utils.vh"
+
+  // Sign-extends
+  wire [47:0] SX_imm27  = cpu_ad48_sx_imm27(imm27);
+  wire [47:0] SX_disp33 = cpu_ad48_sx_disp33(disp33);
+  wire [47:0] SX_br31   = cpu_ad48_sx_br31(br_off31);
+  wire [47:0] SX_jal36  = cpu_ad48_sx_jal36(jal_off);
+  wire [47:0] SX_jr33   = cpu_ad48_sx_jr33(jr_imm33);
+  wire [48:0] jalr_target_ext = {1'b0, rA} + {SX_jr33[47], SX_jr33};
+  wire [47:0] jalr_target     = jalr_target_ext[47:0];
+  wire        jalr_target_ovf = jalr_target_ext[48];
+  wire        jalr_target_oob = jalr_target_ovf || (jalr_target >= IM_WORDS);
+
+  wire [48:0] base_plus_disp_ext = {1'b0, rA} + {SX_disp33[47], SX_disp33};
+  wire [47:0] base_plus_disp     = base_plus_disp_ext[47:0];
+  wire        base_plus_disp_ovf = base_plus_disp_ext[48];
+  wire        base_plus_disp_oob = (base_plus_disp >= DM_WORDS);
+  wire        mem_addr_invalid   = base_plus_disp_ovf || base_plus_disp_oob;
+  wire [$clog2(DM_WORDS)-1:0] base_disp_idx = base_plus_disp[$clog2(DM_WORDS)-1:0];
 
   initial begin
     if (TOTAL_IRQ_LINES > 48) begin
@@ -311,46 +313,6 @@ module cpu_ad48 #(
     .lt_s(alu_lt_s),
     .lt_u(alu_lt_u)
   );
-
-  // Helper: decode ALU immediate sub-ops into {valid, imm_zero, alu_op}.
-  function automatic [7:0] decode_alui_subop;
-    input [3:0] subop;
-    begin
-      case (subop)
-        F_ADD: decode_alui_subop = {1'b1, 1'b0, 6'h00};
-        F_AND: decode_alui_subop = {1'b1, 1'b0, 6'h02};
-        F_OR : decode_alui_subop = {1'b1, 1'b0, 6'h03};
-        F_XOR: decode_alui_subop = {1'b1, 1'b0, 6'h04};
-        F_SLL: decode_alui_subop = {1'b1, 1'b0, 6'h05};
-        F_SRL: decode_alui_subop = {1'b1, 1'b0, 6'h06};
-        F_SRA: decode_alui_subop = {1'b1, 1'b0, 6'h07};
-        F_NOT: decode_alui_subop = {1'b1, 1'b1, 6'h08};
-        default: decode_alui_subop = {1'b0, 1'b0, 6'h00};
-      endcase
-    end
-  endfunction
-
-  function automatic [CSR_META_WIDTH-1:0] csr_lookup_meta;
-    input [11:0] addr;
-    begin
-      case (addr)
-        CSR_STATUS:      csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_STATUS,      1'b1, CSR_MASK_STATUS};
-        CSR_SCRATCH:     csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SCRATCH,     1'b0, CSR_MASK_FULL};
-        CSR_EPC:         csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_EPC,         1'b1, CSR_MASK_FULL};
-        CSR_CAUSE:       csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_CAUSE,       1'b0, CSR_MASK_FULL};
-        CSR_LR:          csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_LR,          1'b1, CSR_MASK_FULL};
-        CSR_SSP:         csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_SSP,         1'b0, CSR_MASK_FULL};
-        CSR_IRQ_ENABLE:  csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_ENABLE,  1'b0, IRQ_LINE_MASK};
-        CSR_IRQ_PENDING: csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_PENDING, 1'b1, IRQ_LINE_MASK};
-        CSR_IRQ_VECTOR:  csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_IRQ_VECTOR,  1'b0, CSR_MASK_FULL};
-        CSR_CYCLE:       csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_CYCLE,       1'b0, CSR_MASK_FULL};
-        CSR_INSTRET:     csr_lookup_meta = {1'b1, PRIV_USER,       CSR_SEL_INSTRET,     1'b0, CSR_MASK_FULL};
-        CSR_TIMER:       csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER,       1'b0, CSR_MASK_FULL};
-        CSR_TIMER_CMP:   csr_lookup_meta = {1'b1, PRIV_SUPERVISOR, CSR_SEL_TIMER_CMP,   1'b0, CSR_MASK_FULL};
-        default:         csr_lookup_meta = {1'b0, PRIV_MACHINE,    CSR_SEL_ZERO,        1'b0, CSR_MASK_ZERO};
-      endcase
-    end
-  endfunction
 
   // ------------------- DMEM -------------------
   wire [47:0] d_rdata;
@@ -475,7 +437,7 @@ module cpu_ad48 #(
         alu_b = SX_imm27;  // used by ADDI; for shifts, only shamt matters
         shamt = imm27[5:0];
 
-        alui_info = decode_alui_subop(subop[3:0]);
+        alui_info = cpu_ad48_decode_alui_subop(subop[3:0]);
         op_valid  = alui_info[7];
         imm_zero  = alui_info[6];
 
@@ -503,7 +465,7 @@ module cpu_ad48 #(
         alu_b = SX_imm27;
         shamt = imm27[5:0];
 
-        alui_info = decode_alui_subop(subop[3:0]);
+        alui_info = cpu_ad48_decode_alui_subop(subop[3:0]);
         op_valid  = alui_info[7];
         imm_zero  = alui_info[6];
 
@@ -607,7 +569,7 @@ module cpu_ad48 #(
         reg                               csr_write_allowed;
         csr_addr_sel = csr_addr;
 
-        csr_meta          = csr_lookup_meta(csr_addr);
+        csr_meta          = cpu_ad48_csr_lookup_meta(csr_addr);
         csr_known         = csr_meta[CSR_META_VALID_BIT];
         csr_required_priv = csr_meta[CSR_META_PRIV_MSB:CSR_META_PRIV_LSB];
         csr_read_sel      = csr_meta[CSR_META_READSEL_MSB:CSR_META_READSEL_LSB];
@@ -841,13 +803,14 @@ module cpu_ad48 #(
 
       if (trap_pending) begin
         priv_mode <= PRIV_MACHINE;
-        csr_status <= status_trap_transition(csr_status, priv_mode);
+        csr_status <= cpu_ad48_status_trap_transition(csr_status, priv_mode);
       end else if (iret) begin
-        priv_mode <= status_prev_mode(csr_status);
-        csr_status <= status_iret_transition(csr_status);
+        priv_mode <= cpu_ad48_status_prev_mode(csr_status);
+        csr_status <= cpu_ad48_status_iret_transition(csr_status);
       end else if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_STATUS)) begin
-        priv_mode <= sanitize_priv_mode(csr_write_value[1:0]);
-        csr_status <= normalize_status_write(csr_write_value, sanitize_priv_mode(csr_write_value[1:0]));
+        priv_mode <= cpu_ad48_sanitize_priv_mode(csr_write_value[1:0]);
+        csr_status <= cpu_ad48_normalize_status_write(
+          csr_write_value, cpu_ad48_sanitize_priv_mode(csr_write_value[1:0]));
       end else begin
         csr_status[1:0] <= priv_mode;
       end
@@ -924,86 +887,5 @@ module cpu_ad48 #(
       end
     end
   end
-
-  function automatic [1:0] sanitize_priv_mode;
-    input [1:0] mode_in;
-    begin
-      case (mode_in)
-        PRIV_MACHINE:    sanitize_priv_mode = PRIV_MACHINE;
-        PRIV_SUPERVISOR: sanitize_priv_mode = PRIV_SUPERVISOR;
-        default:         sanitize_priv_mode = PRIV_USER;
-      endcase
-    end
-  endfunction
-
-  function automatic [1:0] status_prev_mode;
-    input [47:0] status_in;
-    begin
-      status_prev_mode = sanitize_priv_mode(status_in[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB]);
-    end
-  endfunction
-
-  function automatic [47:0] normalize_status_write;
-    input [47:0] write_value;
-    input [1:0]  new_mode;
-    reg [47:0] status_out;
-    begin
-      status_out = write_value;
-      status_out[1:0] = new_mode;
-      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] =
-        sanitize_priv_mode(write_value[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB]);
-      normalize_status_write = status_out;
-    end
-  endfunction
-
-  function automatic [47:0] status_trap_transition;
-    input [47:0] status_in;
-    input [1:0]  mode_in;
-    reg [47:0] status_out;
-    reg [1:0]  sanitized_mode;
-    begin
-      status_out     = status_in;
-      sanitized_mode = sanitize_priv_mode(mode_in);
-      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] = sanitized_mode;
-      case (sanitized_mode)
-        PRIV_MACHINE:    status_out[STATUS_MPIE_BIT] = status_in[STATUS_MIE_BIT];
-        PRIV_SUPERVISOR: status_out[STATUS_KPIE_BIT] = status_in[STATUS_KIE_BIT];
-        default:         status_out[STATUS_UPIE_BIT] = status_in[STATUS_UIE_BIT];
-      endcase
-      status_out[STATUS_MPIE_BIT] = status_in[STATUS_MIE_BIT];
-      status_out[STATUS_MIE_BIT] = 1'b0;
-      status_out[1:0]            = PRIV_MACHINE;
-      status_trap_transition     = status_out;
-    end
-  endfunction
-
-  function automatic [47:0] status_iret_transition;
-    input [47:0] status_in;
-    reg [47:0] status_out;
-    reg [1:0]  resume_mode;
-    begin
-      status_out  = status_in;
-      resume_mode = status_prev_mode(status_in);
-      status_out[1:0] = resume_mode;
-      status_out[STATUS_MIE_BIT] = status_in[STATUS_MPIE_BIT];
-      case (resume_mode)
-        PRIV_MACHINE: begin
-          status_out[STATUS_MIE_BIT]  = status_in[STATUS_MPIE_BIT];
-          status_out[STATUS_MPIE_BIT] = 1'b1;
-        end
-        PRIV_SUPERVISOR: begin
-          status_out[STATUS_KIE_BIT]  = status_in[STATUS_KPIE_BIT];
-          status_out[STATUS_KPIE_BIT] = 1'b1;
-        end
-        default: begin
-          status_out[STATUS_UIE_BIT]  = status_in[STATUS_UPIE_BIT];
-          status_out[STATUS_UPIE_BIT] = 1'b1;
-        end
-      endcase
-      status_out[STATUS_MPIE_BIT] = 1'b1;
-      status_out[STATUS_PREV_MODE_MSB:STATUS_PREV_MODE_LSB] = PRIV_USER;
-      status_iret_transition = status_out;
-    end
-  endfunction
 
 endmodule
