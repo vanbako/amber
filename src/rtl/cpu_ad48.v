@@ -70,6 +70,7 @@ module cpu_ad48 #(
   // ------------------- PC & IMEM -------------------
   reg  [47:0] pc;
   wire [47:0] instr;
+  wire [47:0] pc_plus_one = pc + 48'd1;
 
   wire [$clog2(IM_WORDS)-1:0] pc_idx = pc[$clog2(IM_WORDS)-1:0];
 
@@ -187,11 +188,6 @@ module cpu_ad48 #(
   wire [47:0] SX_br31   = cpu_ad48_sx_br31(br_off31);
   wire [47:0] SX_jal36  = cpu_ad48_sx_jal36(jal_off);
   wire [47:0] SX_jr33   = cpu_ad48_sx_jr33(jr_imm33);
-  wire [48:0] jalr_target_ext = {1'b0, rA} + {SX_jr33[47], SX_jr33};
-  wire [47:0] jalr_target     = jalr_target_ext[47:0];
-  wire        jalr_target_ovf = jalr_target_ext[48];
-  wire        jalr_target_oob = jalr_target_ovf || (jalr_target >= IM_WORDS);
-
   wire [48:0] base_plus_disp_ext = {1'b0, rA} + {SX_disp33[47], SX_disp33};
   wire [47:0] base_plus_disp     = base_plus_disp_ext[47:0];
   wire        base_plus_disp_ovf = base_plus_disp_ext[48];
@@ -379,6 +375,64 @@ module cpu_ad48 #(
   end
   endtask
 
+  localparam integer JALR_INFO_WIDTH     = 1 + 48;
+  localparam integer JALR_TARGET_LSB     = 0;
+  localparam integer JALR_TARGET_MSB     = JALR_TARGET_LSB + 48 - 1;
+  localparam integer JALR_OOB_BIT        = JALR_TARGET_MSB + 1;
+
+  function automatic [0:0] cpu_ad48_branch_take;
+    input [2:0] cond_code;
+    input       eq_flag;
+    input       lt_signed;
+    input       lt_unsigned;
+  begin
+    case (cond_code)
+      C_BEQ:    cpu_ad48_branch_take = eq_flag;
+      C_BNE:    cpu_ad48_branch_take = ~eq_flag;
+      C_BLT:    cpu_ad48_branch_take = lt_signed;
+      C_BLTU:   cpu_ad48_branch_take = lt_unsigned;
+      C_BGE:    cpu_ad48_branch_take = ~lt_signed;
+      C_BGEU:   cpu_ad48_branch_take = ~lt_unsigned;
+      C_ALWAYS: cpu_ad48_branch_take = 1'b1;
+      default:  cpu_ad48_branch_take = 1'b0;
+    endcase
+  end
+  endfunction
+
+  function [WB_BUNDLE_WIDTH-1:0] cpu_ad48_jal_link_write;
+    input       link_is_d;
+    input [2:0] link_idx;
+    input [47:0] link_value;
+  begin
+    cpu_ad48_jal_link_write =
+      cpu_ad48_make_writeback_bundle(~link_is_d, link_idx, link_value);
+  end
+  endfunction
+
+  function automatic [JALR_INFO_WIDTH-1:0] cpu_ad48_jalr_target_calc;
+    input [47:0] base_value;
+    input [47:0] offset_value;
+    input integer im_words_value;
+    reg [48:0] sum_ext;
+    reg [47:0] sum;
+    reg [47:0] im_words_limit;
+    reg        out_of_bounds;
+  begin
+    sum_ext = {1'b0, base_value} + {offset_value[47], offset_value};
+    sum = sum_ext[47:0];
+    im_words_limit = im_words_value;
+    out_of_bounds = sum_ext[48] || (sum >= im_words_limit);
+    cpu_ad48_jalr_target_calc = {out_of_bounds, sum};
+  end
+  endfunction
+
+  wire [JALR_INFO_WIDTH-1:0] jalr_info =
+    cpu_ad48_jalr_target_calc(rA, SX_jr33, IM_WORDS);
+  wire [47:0] jalr_target = jalr_info[JALR_TARGET_MSB:JALR_TARGET_LSB];
+  wire        jalr_target_oob = jalr_info[JALR_OOB_BIT];
+
+  wire        branch_taken = cpu_ad48_branch_take(br_cond, alu_eq, alu_lt_s, alu_lt_u);
+
   function [ALU_CTRL_WIDTH-1:0] cpu_ad48_encode_alu_ctrl;
     input valid;
     input [5:0] op;
@@ -478,7 +532,7 @@ module cpu_ad48 #(
     d_addr = '0;
 
     // next PC defaults
-    next_pc = pc + 48'd1;
+    next_pc = pc_plus_one;
     halt    = 1'b0;
 
     // CSR defaults
@@ -573,41 +627,21 @@ module cpu_ad48 #(
       end
 
       OP_BR: begin
-        // Evaluate condition using comparator wires
-        reg take;
-        begin
-          case (br_cond)
-            C_BEQ:    take = (rA == rD);
-            C_BNE:    take = (rA != rD);
-            C_BLT:    take = ($signed(rA) <  $signed(rD));
-            C_BLTU:   take = (rA < rD);
-            C_BGE:    take = ($signed(rA) >= $signed(rD));
-            C_BGEU:   take = (rA >= rD);
-            C_ALWAYS: take = 1'b1;
-            default:  take = 1'b0;
-          endcase
-          if (take) next_pc = pc + 48'd1 + SX_br31;
+        alu_a = rA; alu_b = rD;
+        if (branch_taken) begin
+          next_pc = pc_plus_one + SX_br31;
         end
       end
 
       OP_JAL: begin
-        // link
-        if (j_rdBank) begin
-          weD = 1'b1; wD_idx = j_rdIdx; wD_data = pc + 48'd1;
-        end else begin
-          weA = (j_rdIdx != 3'd0); wA_idx = j_rdIdx; wA_data = pc + 48'd1;
-        end
-        // jump
-        next_pc = pc + 48'd1 + SX_jal36;
+        cpu_ad48_assign_writeback(
+          cpu_ad48_jal_link_write(j_rdBank, j_rdIdx, pc_plus_one));
+        next_pc = pc_plus_one + SX_jal36;
       end
 
       OP_JALR: begin
-        // target = A[jr_rsA] + imm
-        if (j_rdBank) begin
-          weD = 1'b1; wD_idx = j_rdIdx; wD_data = pc + 48'd1;
-        end else begin
-          weA = (j_rdIdx != 3'd0); wA_idx = j_rdIdx; wA_data = pc + 48'd1;
-        end
+        cpu_ad48_assign_writeback(
+          cpu_ad48_jal_link_write(j_rdBank, j_rdIdx, pc_plus_one));
         if (jalr_target_oob) begin
           illegal_instr = 1'b1;
         end else begin
