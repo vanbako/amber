@@ -16,6 +16,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 TB_DIR = REPO_ROOT / "verif" / "env"
 RTL_SOURCES = [
     REPO_ROOT / "src" / "rtl" / "cpu_ad48.v",
+    REPO_ROOT / "src" / "rtl" / "mem_access_unit.v",
     REPO_ROOT / "src" / "rtl" / "alu.v",
     REPO_ROOT / "src" / "rtl" / "regfiles.v",
     REPO_ROOT / "src" / "rtl" / "mem48.v",

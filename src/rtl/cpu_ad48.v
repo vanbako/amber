@@ -188,12 +188,26 @@ module cpu_ad48 #(
   wire [47:0] SX_br31   = cpu_ad48_sx_br31(br_off31);
   wire [47:0] SX_jal36  = cpu_ad48_sx_jal36(jal_off);
   wire [47:0] SX_jr33   = cpu_ad48_sx_jr33(jr_imm33);
-  wire [48:0] base_plus_disp_ext = {1'b0, rA} + {SX_disp33[47], SX_disp33};
-  wire [47:0] base_plus_disp     = base_plus_disp_ext[47:0];
-  wire        base_plus_disp_ovf = base_plus_disp_ext[48];
-  wire        base_plus_disp_oob = (base_plus_disp >= DM_WORDS);
-  wire        mem_addr_invalid   = base_plus_disp_ovf || base_plus_disp_oob;
-  wire [$clog2(DM_WORDS)-1:0] base_disp_idx = base_plus_disp[$clog2(DM_WORDS)-1:0];
+  wire        mem_addr_invalid;
+  wire [$clog2(DM_WORDS)-1:0] mem_addr_index;
+  wire        mem_post_update_en;
+  wire [2:0]  mem_post_update_idx;
+  wire [47:0] mem_post_update_value;
+
+  mem_access_unit #(
+    .WORD_WIDTH(48),
+    .DM_WORDS(DM_WORDS)
+  ) mem_access_unit_i (
+    .base_value(rA),
+    .disp_value(SX_disp33),
+    .base_index(baseA),
+    .post_increment(postinc),
+    .address_index(mem_addr_index),
+    .address_invalid(mem_addr_invalid),
+    .post_update_en(mem_post_update_en),
+    .post_update_idx(mem_post_update_idx),
+    .post_update_value(mem_post_update_value)
+  );
 
   initial begin
     if (TOTAL_IRQ_LINES > 48) begin
@@ -602,12 +616,12 @@ module cpu_ad48 #(
           misaligned_load = 1'b1;
         end else begin
           alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-          d_addr = base_disp_idx;
+          d_addr = mem_addr_index;
           weD = 1'b1; wD_idx = ld_rdD; wD_data = d_rdata;
 
           // post-inc writeback to A (but never to A0)
-          if (postinc && (baseA != 3'd0)) begin
-            weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          if (mem_post_update_en) begin
+            weA = 1'b1; wA_idx = mem_post_update_idx; wA_data = mem_post_update_value;
           end
         end
       end
@@ -617,11 +631,11 @@ module cpu_ad48 #(
           misaligned_store = 1'b1;
         end else begin
           alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-          d_addr = base_disp_idx;
+          d_addr = mem_addr_index;
           d_we   = 1'b1;
 
-          if (postinc && (baseA != 3'd0)) begin
-            weA = 1'b1; wA_idx = baseA; wA_data = base_plus_disp;
+          if (mem_post_update_en) begin
+            weA = 1'b1; wA_idx = mem_post_update_idx; wA_data = mem_post_update_value;
           end
         end
       end

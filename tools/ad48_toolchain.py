@@ -39,6 +39,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_SIM_TESTBENCH = REPO_ROOT / "tools" / "sim" / "run_core_tb.v"
 DEFAULT_SIM_RTL = [
     REPO_ROOT / "src" / "rtl" / "cpu_ad48.v",
+    REPO_ROOT / "src" / "rtl" / "mem_access_unit.v",
     REPO_ROOT / "src" / "rtl" / "alu.v",
     REPO_ROOT / "src" / "rtl" / "regfiles.v",
     REPO_ROOT / "src" / "rtl" / "mem48.v",
