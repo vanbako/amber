@@ -629,11 +629,31 @@ module cpu_ad48 #(
   end
   endfunction
 
+  function automatic [47:0] cpu_ad48_next_irq_pending;
+    input [47:0] current_pending;
+    input        pending_write_en;
+    input [47:0] pending_write_value;
+    input [47:0] live_signals;
+    reg [47:0] base_pending;
+  begin
+    base_pending = pending_write_en ?
+      (pending_write_value & IRQ_LINE_MASK) :
+      (current_pending & IRQ_LINE_MASK);
+    cpu_ad48_next_irq_pending =
+      base_pending | (live_signals & IRQ_LINE_MASK);
+  end
+  endfunction
+
   wire [47:0] irq_external = {{(48-IRQ_LINES){1'b0}}, irq};
   wire        timer_irq_level = (csr_timer_cmp != 48'd0) && (csr_timer >= csr_timer_cmp);
   wire [47:0] irq_timer_mask = timer_irq_level ? TIMER_IRQ_BIT_MASK : 48'd0;
   wire [47:0] irq_signals = irq_external | irq_timer_mask;
-  wire [47:0] irq_combined = csr_irq_pending | irq_signals;
+  wire        csr_irq_pending_write =
+    csr_write_en && !csr_illegal && (csr_addr_sel == CSR_IRQ_PENDING);
+  wire [47:0] csr_irq_pending_next =
+    cpu_ad48_next_irq_pending(
+      csr_irq_pending, csr_irq_pending_write, csr_write_value, irq_signals);
+  wire [47:0] irq_combined = csr_irq_pending_next;
   wire        irq_mode_enable =
     (priv_mode == PRIV_MACHINE)    ? status_mie :
     (priv_mode == PRIV_SUPERVISOR) ? status_kie :
@@ -1081,15 +1101,7 @@ module cpu_ad48 #(
         csr_irq_vector <= csr_write_value;
       end
 
-      begin : pending_update
-        reg [47:0] pending_new;
-        pending_new = csr_irq_pending & IRQ_LINE_MASK;
-        if (csr_write_en && !csr_illegal && (csr_addr_sel == CSR_IRQ_PENDING)) begin
-          pending_new = csr_write_value & IRQ_LINE_MASK;
-        end
-        pending_new = pending_new | (irq_signals & IRQ_LINE_MASK);
-        csr_irq_pending <= pending_new;
-      end
+      csr_irq_pending <= csr_irq_pending_next;
 
       if (ssp_write_en) begin
         csr_ssp <= ssp_write_data;

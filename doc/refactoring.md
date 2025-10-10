@@ -37,7 +37,7 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** In-line loop searches for the first enabled IRQ, burying policy inside the main control block.
 - **Action:** Extract to an `irq_priority` function/module returning `{found, index}`, making alternative ordering strategies or mask handling pluggable.
 
-## IRQ Pending Bookkeeping
+## IRQ Pending Bookkeeping (implemented)
 - **Scope:** `src/rtl/cpu_ad48.v:912-919`
 - **Pain point:** Masking and accumulation of pending IRQ bits is duplicated in combinational and sequential paths.
 - **Action:** Factor out a shared function that takes current pending, write intents, and live signals, returning the next pending vector to keep policy consistent.
