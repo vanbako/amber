@@ -22,7 +22,7 @@ Each milestone below builds toward a protected, multitasking operating system ru
 - Refactoring
   1. factor ALU-immediate decode into a helper
   2. prototype a CSR metadata table
-  3. split the big combinational block into themed sub-blocks or modules once helpers are in place.
+  3. split the big combinational block into themed sub-blocks or modules once helpers are in place ([refactoring plan](refactoring.md#control-block-decomposition)).
 - Capability metadata (bounds/permissions tags) attached to pointer-carrying registers.
 - System call ABI routing through the trap handler with context save/restore helpers.
 
@@ -67,4 +67,3 @@ Each milestone below builds toward a protected, multitasking operating system ru
 - On-chip debug features: hardware breakpoints, trace buffers, and performance counters.
 - Capability-aware loader and runtime checks integrated with the OS memory manager.
 - Comprehensive documentation, compliance tests, and CI flow for regression gating.
-
