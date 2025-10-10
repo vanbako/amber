@@ -104,11 +104,54 @@ def is_identifier(token: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][\w@$\.]*", token))
 
 
-def read_source(path: pathlib.Path) -> List[SourceLine]:
+def read_source(path: pathlib.Path, *, _stack: Optional[Tuple[pathlib.Path, ...]] = None) -> List[SourceLine]:
+    path = path.resolve()
+    stack = _stack or ()
+    if path in stack:
+        chain = " -> ".join(str(p) for p in stack + (path,))
+        raise AssemblerError(f"{path}: recursive .include detected ({chain})")
     lines: List[SourceLine] = []
-    with path.open("r", encoding="utf-8") as fh:
-        for idx, raw in enumerate(fh, start=1):
-            lines.append(SourceLine(SourceLocation(path, idx), raw.rstrip("\n")))
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for idx, raw in enumerate(fh, start=1):
+                text = raw.rstrip("\n")
+                loc = SourceLocation(path, idx)
+                stripped = strip_comment(text).strip()
+                if stripped.lower().startswith(".include"):
+                    rest = stripped[len(".include") :].strip()
+                    if not rest:
+                        raise AssemblerError(f"{loc}: .include requires a path")
+                    include_path_str: Optional[str] = None
+                    if rest[0] in {'"', "'"}:
+                        quote = rest[0]
+                        end = rest.find(quote, 1)
+                        if end == -1:
+                            raise AssemblerError(f"{loc}: unterminated quote in .include")
+                        include_path_str = rest[1:end]
+                        trailing = rest[end + 1 :].strip()
+                        if trailing:
+                            raise AssemblerError(f"{loc}: unexpected tokens after .include path")
+                    elif rest[0] == "<":
+                        end = rest.find(">")
+                        if end == -1:
+                            raise AssemblerError(f"{loc}: unterminated angle bracket in .include")
+                        include_path_str = rest[1:end]
+                        trailing = rest[end + 1 :].strip()
+                        if trailing:
+                            raise AssemblerError(f"{loc}: unexpected tokens after .include path")
+                    else:
+                        parts = rest.split()
+                        include_path_str = parts[0]
+                        if len(parts) > 1:
+                            raise AssemblerError(f"{loc}: unexpected tokens after .include path")
+                    include_path = (path.parent / include_path_str).resolve()
+                    if not include_path.is_file():
+                        raise AssemblerError(f"{loc}: include file '{include_path_str}' not found")
+                    lines.extend(read_source(include_path, _stack=stack + (path,)))
+                    continue
+                lines.append(SourceLine(loc, text))
+    except FileNotFoundError as exc:
+        raise AssemblerError(f"{path}: source file not found") from exc
     return lines
 
 

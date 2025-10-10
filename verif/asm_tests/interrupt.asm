@@ -1,16 +1,7 @@
 ; AD48 interrupt regression: exercises IRQ enable/pending CSRs, interrupt entry/return,
 ; and verifies handler state restoration.
 
-.macro LOAD_IMM_D reg, value
-    copy \reg, a0
-    add  \reg, \reg, (\value)
-.endmacro
-
-.macro ASSERT_D_EQ reg, value
-    copy a7, \reg
-    LOAD_IMM_D d7, (\value)
-    branch.ne fail, a7, d7
-.endmacro
+.include "macros.inc"
 
 start:
     copy d0, a0

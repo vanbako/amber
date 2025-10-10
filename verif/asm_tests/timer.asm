@@ -8,16 +8,7 @@
 .equ IRQ_VECTOR_BASE, 128
 .equ REQUIRED_TICKS, 2
 
-.macro LOAD_IMM_D reg, value
-    copy \reg, a0
-    add  \reg, \reg, (\value)
-.endmacro
-
-.macro ASSERT_D_EQ reg, value
-    copy a6, \reg
-    LOAD_IMM_D d6, (\value)
-    branch.ne fail, a6, d6
-.endmacro
+.include "macros.inc"
 
 start:
     copy d0, a0
@@ -100,5 +91,6 @@ timer_handler:
     copy a6, d1
     add d3, a6, d6
     csr.write timer_cmp, d3
+    LOAD_IMM_D d7, TIMER_IRQ_MASK
     csr.clear irq_pending, d7
     iret

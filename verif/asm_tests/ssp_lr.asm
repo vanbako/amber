@@ -1,14 +1,6 @@
 ; Validate supervisor stack pointer (SSP) and link register (LR) behaviour using a machine-mode breakpoint trap.
 
-.macro LOAD_IMM_A reg, value
-    copy \reg, a0
-    add  \reg, \reg, (\value)
-.endmacro
-
-.macro LOAD_IMM_D reg, value
-    copy \reg, a0
-    add  \reg, \reg, (\value)
-.endmacro
+.include "macros.inc"
 
 .equ stack_base, 0x010
 

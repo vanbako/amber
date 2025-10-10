@@ -1,15 +1,6 @@
 ; AD48 privilege regression: ensure STATUS mode bits drive hardware user access controls.
 
-.macro LOAD_IMM_D reg, value
-    copy \reg, a0
-    add  \reg, \reg, (\value)
-.endmacro
-
-.macro ASSERT_D_EQ reg, value
-    copy a7, \reg
-    LOAD_IMM_D d0, (\value)
-    branch.ne fail, a7, d0
-.endmacro
+.include "macros.inc"
 
 start:
     copy d0, a0
