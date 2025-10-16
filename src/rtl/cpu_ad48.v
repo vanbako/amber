@@ -770,6 +770,99 @@ module cpu_ad48 #(
   end
   endtask
 
+  task automatic cpu_ad48_mem_access_ctrl;
+    input [3:0] opcode;
+  begin
+    case (opcode)
+      OP_LD: begin
+        if (!rA_cap_valid || cap_base_gt_limit ||
+            cap_addr_below_base || cap_addr_above_limit ||
+            !cap_read_ok) begin
+          capability_load_fault = 1'b1;
+        end else if (mem_addr_invalid) begin
+          misaligned_load = 1'b1;
+        end else begin
+          alu_a = rA;
+          alu_b = SX_disp33;
+          alu_op = 6'h00;
+          d_addr = mem_addr_index;
+          cpu_ad48_request_writeback(1'b0, ld_rdD, d_rdata, WB_PRIO_MEM);
+          if (mem_post_update_en) begin
+            cpu_ad48_request_writeback(
+              1'b1,
+              mem_post_update_idx,
+              mem_post_update_value,
+              WB_PRIO_POST);
+            cpu_ad48_request_capability(
+              mem_post_update_idx,
+              rA_cap_valid,
+              rA_cap_base,
+              rA_cap_limit,
+              rA_cap_perms);
+          end
+        end
+      end
+      OP_ST: begin
+        if (!rA_cap_valid || cap_base_gt_limit ||
+            cap_addr_below_base || cap_addr_above_limit ||
+            !cap_write_ok) begin
+          capability_store_fault = 1'b1;
+        end else if (mem_addr_invalid) begin
+          misaligned_store = 1'b1;
+        end else begin
+          alu_a = rA;
+          alu_b = SX_disp33;
+          alu_op = 6'h00;
+          d_addr = mem_addr_index;
+          d_we   = 1'b1;
+          if (mem_post_update_en) begin
+            cpu_ad48_request_writeback(
+              1'b1,
+              mem_post_update_idx,
+              mem_post_update_value,
+              WB_PRIO_POST);
+            cpu_ad48_request_capability(
+              mem_post_update_idx,
+              rA_cap_valid,
+              rA_cap_base,
+              rA_cap_limit,
+              rA_cap_perms);
+          end
+        end
+      end
+      default: begin
+        // other opcodes handled elsewhere
+      end
+    endcase
+  end
+  endtask
+
+  task automatic cpu_ad48_decode_exec;
+    input [3:0] opcode;
+    input [3:0] opcode_ext;
+    input        swap_operands;
+    input [47:0] src_a;
+    input [47:0] src_d;
+    output reg   exec_valid;
+    output reg   exec_illegal;
+    output reg [ALU_CTRL_WIDTH-1:0] alu_ctrl;
+  begin
+    exec_valid  = 1'b0;
+    exec_illegal = 1'b0;
+    alu_ctrl    = {ALU_CTRL_WIDTH{1'b0}};
+    case (opcode)
+      OP_ALU: begin
+        alu_ctrl = cpu_ad48_decode_alu_ext_ctrl(opcode_ext, swap_operands, src_a, src_d);
+        exec_valid  = alu_ctrl[ALU_CTRL_VALID_BIT];
+        exec_illegal = ~exec_valid;
+      end
+      default: begin
+        // other opcodes handled elsewhere
+      end
+    endcase
+  end
+  endtask
+
   // Encapsulate IRQ selection so different priority policies can be plugged in.
   function automatic [IRQ_PRIORITY_WIDTH-1:0] cpu_ad48_irq_priority;
     input [47:0] pending_lines;
@@ -881,7 +974,7 @@ module cpu_ad48 #(
 
     // memory defaults
     d_we   = 1'b0;
-    d_addr = '0;
+    d_addr = mem_addr_index;
 
     // next PC defaults
     next_pc = pc_plus_one;
@@ -919,16 +1012,25 @@ module cpu_ad48 #(
     if (resetn) begin
       case (op)
       OP_ALU: begin
+        reg exec_valid;
+        reg exec_illegal;
         reg [ALU_CTRL_WIDTH-1:0] alu_ctrl;
-        reg [WB_BUNDLE_WIDTH-1:0] wb_bundle;
-        alu_ctrl = cpu_ad48_decode_alu_ext_ctrl(op_ext, swap, rA, rD);
-        if (alu_ctrl[ALU_CTRL_VALID_BIT]) begin
+        cpu_ad48_decode_exec(
+          op,
+          op_ext,
+          swap,
+          rA,
+          rD,
+          exec_valid,
+          exec_illegal,
+          alu_ctrl);
+        if (exec_illegal) begin
+          illegal_instr = 1'b1;
+        end else if (exec_valid) begin
           alu_op = alu_ctrl[ALU_CTRL_OP_MSB:ALU_CTRL_OP_LSB];
           shamt  = alu_ctrl[ALU_CTRL_SHAMT_MSB:ALU_CTRL_SHAMT_LSB];
-          wb_bundle = cpu_ad48_make_writeback_bundle(rdBankA, rdIdx, alu_y);
-          cpu_ad48_assign_writeback(wb_bundle);
-        end else begin
-          illegal_instr = 1'b1;
+          cpu_ad48_assign_writeback(
+            cpu_ad48_make_writeback_bundle(rdBankA, rdIdx, alu_y));
         end
       end
 
@@ -940,59 +1042,9 @@ module cpu_ad48 #(
         cpu_ad48_execute_alui(rD, SX_imm27, imm27[5:0], subop[3:0], rdBankA, rdIdx);
       end
 
-      OP_LD: begin
-        // address = A[baseA] + disp
-        // DMEM is word-addressed: use low address bits sized to DM_WORDS
-        // LD always writes to D bank (rdD)
-        // Optional post-inc: A[baseA] += disp (suppressed if baseA==A0)
-        if (!rA_cap_valid || cap_base_gt_limit ||
-            cap_addr_below_base || cap_addr_above_limit ||
-            !cap_read_ok) begin
-          capability_load_fault = 1'b1;
-        end else if (mem_addr_invalid) begin
-          misaligned_load = 1'b1;
-        end else begin
-          alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-          d_addr = mem_addr_index;
-          cpu_ad48_request_writeback(1'b0, ld_rdD, d_rdata, WB_PRIO_MEM);
-
-          // post-inc writeback to A (but never to A0)
-          if (mem_post_update_en) begin
-            cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
-            cpu_ad48_request_capability(
-              mem_post_update_idx,
-              rA_cap_valid,
-              rA_cap_base,
-              rA_cap_limit,
-              rA_cap_perms
-            );
-          end
-        end
-      end
-
+      OP_LD,
       OP_ST: begin
-        if (!rA_cap_valid || cap_base_gt_limit ||
-            cap_addr_below_base || cap_addr_above_limit ||
-            !cap_write_ok) begin
-          capability_store_fault = 1'b1;
-        end else if (mem_addr_invalid) begin
-          misaligned_store = 1'b1;
-        end else begin
-          alu_a = rA; alu_b = SX_disp33; alu_op = 6'h00;
-          d_addr = mem_addr_index;
-          d_we   = 1'b1;
-
-          if (mem_post_update_en) begin
-            cpu_ad48_request_writeback(1'b1, mem_post_update_idx, mem_post_update_value, WB_PRIO_POST);
-            cpu_ad48_request_capability(
-              mem_post_update_idx,
-              rA_cap_valid,
-              rA_cap_base,
-              rA_cap_limit,
-              rA_cap_perms
-            );
-          end
-        end
+        cpu_ad48_mem_access_ctrl(op);
       end
 
       OP_BR: begin
