@@ -52,7 +52,37 @@ This document captures the primary restructuring opportunities inside `src/rtl/c
 - **Pain point:** The single sequential `always` updates PC, privilege, every CSR, counters, and IRQ bookkeeping, complicating reasoning about ordering.
 - **Action:** Split into themed always blocks or tasks (`update_pc_branching`, `update_privilege_status`, `update_counters`, `update_irq_state`) to isolate dependencies and support future pipelines.
 
-## Control Block Decomposition (not now, maybe later)
+## Control Block Decomposition (planned)
 - **Scope:** `src/rtl/cpu_ad48.v:384`
 - **Pain point:** Single combinational `always @*` interleaves decode, ALU steering, branch handling, memory sequencing, CSR coordination, and trap prep.
 - **Action:** Carve themed control sub-blocks (e.g., `decode_exec`, `mem_access_ctrl`, `csr_dispatch`, `trap_precheck`) as tasks or child modules to shrink the top-level case tree and ease incremental additions.
+
+## Parameterised Memory Interfaces (planned)
+- **Scope:** `src/rtl/mem48.v`, `src/rtl/mem_access_unit.v`, instantiations in `src/rtl/cpu_ad48.v`
+- **Pain point:** Instruction and data memories share a single fixed implementation, making it hard to swap in caches, wider memories, or external buses.
+- **Action:** Wrap the memory blocks behind parameterised modules or an interface layer (AXI-lite style signals, ready/valid handshake), so future SOC work can replace memories without touching the core control logic.
+
+## Register File Module Extraction (planned)
+- **Scope:** `src/rtl/regfiles.v`, register write/read wiring in `src/rtl/cpu_ad48.v`
+- **Pain point:** Operand muxing and writeback rules still leak into the core; adding capabilities (extra banks, debug ports) means editing the main control block.
+- **Action:** Promote the A/D register banks to standalone modules with explicit read/write intents, privilege hooks, and optional capability bits. Expose a narrow API so the core issues commands instead of manipulating raw arrays.
+
+## ALU Micro-Modules (planned)
+- **Scope:** `src/rtl/alu.v`, arithmetic/logic case tree inside `src/rtl/cpu_ad48.v`
+- **Pain point:** A single monolithic case statement makes it cumbersome to add new ALU operations or introduce multi-cycle units.
+- **Action:** Factor arithmetic, logical, shift/rotate, and compare families into sub-modules (or functions) that share a consistent request/response record. This allows incremental upgrades (e.g., multiplier, barrel shifter) without destabilising existing ops.
+
+## System Call & Exception Layer (planned)
+- **Scope:** Trap handling paths in `src/rtl/cpu_ad48.v`, CSR side effects in `src/rtl/csr_unit.v`
+- **Pain point:** Special instructions like HALT are hard-coded during decode, conflating them with generic exception flow and limiting extensibility.
+- **Action:** Route supervisor calls through the trap sequencer/CSR machinery by defining a dedicated syscall request channel and associated CSRs (`mcause`, `mtval` style). This keeps decode lightweight and paves the way for richer supervisor services.
+
+## Interrupt Controller Module (planned)
+- **Scope:** IRQ pending/masking logic in `src/rtl/cpu_ad48.v`, helper functions in `src/rtl/cpu_ad48_utils.vh`
+- **Pain point:** Priority resolution and masking still live inside the core, preventing reuse and complicating experiments with nested/priority interrupts.
+- **Action:** Extract an interrupt controller sub-module that owns pending bits, prioritisation, and acknowledgements. Feed its outputs into the trap sequencer so alternative policies (round-robin, vectored) can be dropped in.
+
+## Pipeline Stage Boundary Definition (future exploration)
+- **Scope:** Entire control/data path in `src/rtl/cpu_ad48.v`
+- **Pain point:** Lack of explicit fetch/decode/execute boundaries blocks incremental pipelining and hampers hazard analysis.
+- **Action:** Introduce clear pipeline registers (even if initially bypassed) between fetch, decode, execute, memory, and writeback flows. Document the signals that cross each boundary to prepare for staged execution and performance features (branch prediction, dual-issue experiments).
