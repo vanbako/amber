@@ -322,6 +322,7 @@ module cpu_ad48 #(
 
   regfileA RF_A(
     .clk(clk),
+    .resetn(resetn),
     .raddr(a_raddr),
     .rdata(rA_pre),
     .cap_valid(rA_cap_valid),
@@ -350,6 +351,7 @@ module cpu_ad48 #(
 
   regfileD RF_D(
     .clk(clk),
+    .resetn(resetn),
     .raddr(d_raddr),
     .rdata(rD),
     .we(weD),

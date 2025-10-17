@@ -1,0 +1,15 @@
+[program]
+name = "jalr_oob"
+format = "memh"
+output = "../../build/asm_tests/jalr_oob.memh"
+listing = "../../build/asm_tests/jalr_oob.lst"
+imem_output = "../../build/asm_tests/jalr_oob.memh"
+
+[[segment]]
+label = "jalr_oob"
+source = "jalr_oob.asm"
+
+[[backend]]
+type = "simulation"
+name = "jalr_oob-sim"
+max_cycles = 512
